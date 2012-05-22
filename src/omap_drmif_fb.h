@@ -38,7 +38,7 @@
 #define OMAP_BO_TILED_32 0
 #define OMAP_BO_TILED_16 0
 #define OMAP_BO_TILED_8 0
-#define OMAP_BO_WC 0
+#define OMAP_BO_WC 1
 #define OMAP_BO_SCANOUT 0
 #define OMAP_BO_TILED 0
 #define OMAP_PARAM_CHIPSET_ID 0
