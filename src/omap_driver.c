@@ -186,7 +186,7 @@ OMAPCloseDRMMaster(ScrnInfoPtr pScrn)
  * TODO get stride requirements from kernel driver, or from EXA module,
  * rather than hard-coding..
  */
-#define STRIDE_BOUNDARY 32
+#define STRIDE_BOUNDARY 2
 unsigned int
 OMAPCalculateStride(unsigned int width, unsigned int bitsPerPixel)
 {
