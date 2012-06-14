@@ -139,6 +139,14 @@ typedef struct {
 
 static void drmmode_output_dpms(xf86OutputPtr output, int mode);
 
+struct drm_exynos_plane_set_zpos {
+	 __u32 plane_id;
+	 __s32 zpos;
+};
+#define DRM_EXYNOS_PLANE_SET_ZPOS       0x06
+#define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
+
 static drmmode_ptr
 drmmode_from_scrn(ScrnInfoPtr pScrn)
 {
@@ -366,6 +374,8 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
+
+	struct drm_exynos_plane_set_zpos data;
 	int crtc_x, crtc_y, src_x, src_y, w, h;
 
 	if (!cursor)
@@ -399,6 +409,10 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 	if ((crtc_y + h) > crtc->mode.VDisplay) {
 		h = crtc->mode.VDisplay - crtc_y;
 	}
+
+	data.plane_id = cursor->ovr->plane_id;
+	data.zpos = 1;
+	ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
 
 	/* note src coords (last 4 args) are in Q16 format */
 	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
