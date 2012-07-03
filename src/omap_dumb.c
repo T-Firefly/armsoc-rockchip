@@ -223,6 +223,11 @@ uint32_t omap_bo_pitch(struct omap_bo *bo)
 	return bo->pitch;
 }
 
+void *omap_bo_addr(struct omap_bo *bo)
+{
+	return bo->map_addr;
+}
+
 void *omap_bo_map(struct omap_bo *bo)
 {
 	if (!bo->map_addr)
