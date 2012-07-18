@@ -948,7 +948,10 @@ OMAPAdjustFrame(int scrnIndex, int x, int y, int flags)
 	drmmode_adjust_frame(pScrn, x, y, flags);
 }
 
-
+/*
+ * Don't drop DRM master; workaround for the VT switch issues
+ */
+#define VT2_WORKAROUND 1
 
 /**
  * The driver's EnterVT() function.  This is called at server startup time, and
@@ -960,15 +963,19 @@ static Bool
 OMAPEnterVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+#ifndef VT2_WORKAROUND
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int ret;
+#endif
 
 	TRACE_ENTER();
 
+#ifndef VT2_WORKAROUND
 	ret = drmSetMaster(pOMAP->drmFD);
 	if (ret) {
 		ERROR_MSG("Cannot get DRM master: %s\n", strerror(ret));
 	}
+#endif
 
 	if (!xf86SetDesiredModes(pScrn)) {
 		ERROR_MSG("xf86SetDesiredModes() failed!");
@@ -990,15 +997,19 @@ static void
 OMAPLeaveVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+#ifndef VT2_WORKAROUND
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int ret;
+#endif
 
 	TRACE_ENTER();
 
+#ifndef VT2_WORKAROUND
 	ret = drmDropMaster(pOMAP->drmFD);
 	if (ret) {
 		WARNING_MSG("drmDropMaster failed: %s\n", strerror(errno));
 	}
+#endif
 
 	TRACE_EXIT();
 }
