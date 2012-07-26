@@ -214,6 +214,7 @@ void drmmode_adjust_frame(ScrnInfoPtr pScrn, int x, int y, int flags);
 Bool drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv);
 void drmmode_wait_for_event(ScrnInfoPtr pScrn);
 Bool drmmode_cursor_init(ScreenPtr pScreen);
+void drmmode_copy_fb(ScrnInfoPtr pScrn);
 
 
 /**

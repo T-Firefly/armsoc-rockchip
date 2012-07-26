@@ -37,13 +37,19 @@
 #include "xorg-server.h"
 #include "xorgVersion.h"
 
+#include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include <string.h>
 #include <math.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <fcntl.h>
+
+#include <linux/fb.h>
+
 
 /* All drivers should typically include these */
 #include "xf86.h"
@@ -1118,6 +1124,8 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd, int cpp)
 
 	TRACE_ENTER();
 
+	pScrn->canDoBGNoneRoot = TRUE;
+
 	drmmode = calloc(1, sizeof *drmmode);
 	drmmode->fd = fd;
 
@@ -1359,3 +1367,66 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 {
 	drmmode_uevent_fini(pScrn);
 }
+
+void drmmode_copy_fb(ScrnInfoPtr pScrn)
+{
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	uint32_t dst_pitch = pScrn->displayWidth * (pScrn->bitsPerPixel / 8);
+	uint32_t src_pitch;
+	unsigned int src_size;
+	unsigned char *dst, *src;
+	struct fb_var_screeninfo vinfo;
+	int fd;
+	int y;
+
+	if (!(dst = omap_bo_map(pOMAP->scanout))) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Couldn't map scanout bo\n");
+		return;
+	}
+
+	fd = open("/dev/fb0", O_RDONLY | O_SYNC);
+	if (fd == -1) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Couldn't open /dev/fb0\n");
+		return;
+	}
+
+	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Vscreeninfo ioctl failed\n");
+		goto close_fd;
+	}
+
+	if (vinfo.bits_per_pixel != 32)
+	{
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"FB found but not 32 bpp\n");
+		goto close_fd;
+	}
+
+	src_pitch = vinfo.xres * (vinfo.bits_per_pixel / 8);
+	src_size = vinfo.yres * src_pitch;
+
+	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
+	if (!src) {
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Couldn't mmap /dev/fb0\n");
+		goto close_fd;
+	}
+
+	for(y = 0; y < pScrn->virtualY; y++) {
+		memcpy(dst, src, src_pitch);
+		dst += dst_pitch;
+		src += src_pitch;
+	}
+
+	omap_bo_cpu_fini(pOMAP->scanout, 0);
+
+	munmap(src, src_size);
+
+close_fd:
+	close(fd);
+}
+
+

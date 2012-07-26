@@ -784,6 +784,8 @@ OMAPScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	 */
 	OMAPEnterVT(scrnIndex, 0);
 
+	drmmode_copy_fb(pScrn);
+
 	/* Set the desired mode(s): */
 	if (!xf86SetDesiredModes(pScrn)) {
 		ERROR_MSG("xf86SetDesiredModes() failed!");
