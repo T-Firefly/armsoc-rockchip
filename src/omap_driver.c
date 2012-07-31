@@ -965,6 +965,13 @@ static Bool
 OMAPEnterVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	int i;
+
+	for (i = 1; i < currentMaxClients; i++) {
+		if (clients[i])
+			AttendClient(clients[i]);
+	}
+
 #ifndef VT2_WORKAROUND
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int ret;
@@ -999,6 +1006,13 @@ static void
 OMAPLeaveVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
+	int i;
+
+	for (i = 1; i < currentMaxClients; i++) {
+		if (clients[i])
+			IgnoreClient(clients[i]);
+	}
+
 #ifndef VT2_WORKAROUND
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int ret;
