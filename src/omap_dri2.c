@@ -209,15 +209,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	 * A: attempt to create a drm_framebuffer, and if that fails then the
 	 * hw must not support.. then fall back to blitting
 	 */
-	/*
-	 * TODO(abhinav@chromium.org): Force a flip to fix crosbug.com/p/11708
-	 * Either the root window has moved or the current drawable's fb is no
-	 * longer the same as the root window. Or the unlikely case is the
-	 * drawable's dimensions are different from the rootwindow's
-	 * Also bliting gives a flicker on the screen
-	 * if (canflip(pDraw) && attachment != DRI2BufferFrontLeft) {
-         */
-	if (attachment != DRI2BufferFrontLeft) {
+	if (canflip(pDraw) && attachment != DRI2BufferFrontLeft) {
 		uint32_t new_fb_id;
 		int ret = drmModeAddFB(pOMAP->drmFD, pDraw->width, pDraw->height,
 				pDraw->depth, pDraw->bitsPerPixel, DRIBUF(buf)->pitch,
