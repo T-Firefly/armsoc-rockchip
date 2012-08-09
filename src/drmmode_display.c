@@ -1402,8 +1402,8 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	src_pitch = vinfo.xres * (vinfo.bits_per_pixel / 8);
-	src_size = vinfo.yres * src_pitch;
+	src_pitch = pScrn->virtualX * (vinfo.bits_per_pixel / 8);
+	src_size = pScrn->virtualY * src_pitch;
 
 	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
 	if (!src) {
