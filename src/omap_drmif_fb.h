@@ -53,6 +53,7 @@ uint32_t omap_bo_height(struct omap_bo *bo);
 uint32_t omap_bo_bpp(struct omap_bo *bo);
 uint32_t omap_bo_pitch(struct omap_bo *bo);
 void *omap_bo_addr(struct omap_bo *bo);
+int omap_bo_clear(struct omap_bo *bo);
 
 #endif /* OMAP_DRMIF_FB_H_ */
 

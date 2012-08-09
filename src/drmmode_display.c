@@ -1080,6 +1080,9 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 		}
 		pitch = omap_bo_pitch(new_scanout);
 
+		if (omap_bo_clear(new_scanout))
+			return FALSE;
+
 		res = drmModeAddFB(drmmode->fd,
 				width, height,
 				pScrn->depth, pScrn->bitsPerPixel,
