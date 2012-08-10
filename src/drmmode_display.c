@@ -1371,10 +1371,11 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 	uint32_t dst_pitch = pScrn->displayWidth * (pScrn->bitsPerPixel / 8);
 	uint32_t src_pitch;
 	unsigned int src_size;
-	unsigned char *dst, *src;
+	unsigned char *dst, *src, *srcp;
 	struct fb_var_screeninfo vinfo;
 	int fd;
 	int y;
+	int min_y, min_pitch;
 
 	if (!(dst = omap_bo_map(pOMAP->scanout))) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -1412,10 +1413,13 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	for(y = 0; y < pScrn->virtualY; y++) {
-		memcpy(dst, src, src_pitch);
+	min_y = pScrn->virtualY > vinfo.yres ? vinfo.yres : pScrn->virtualY;
+	min_pitch = dst_pitch > src_pitch ? src_pitch : dst_pitch;
+	srcp = src;
+	for(y = 0; y < min_y; y++) {
+		memcpy(dst, srcp, min_pitch);
 		dst += dst_pitch;
-		src += src_pitch;
+		srcp += src_pitch;
 	}
 
 	omap_bo_cpu_fini(pOMAP->scanout, 0);
