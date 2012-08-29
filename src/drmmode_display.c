@@ -297,8 +297,9 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 	// Fixme - Intel puts this function here, and Nouveau puts it at the end
 	// of this function -> determine what's best for TI'S OMAP4:
-	crtc->funcs->gamma_set(crtc, crtc->gamma_red, crtc->gamma_green,
-			crtc->gamma_blue, crtc->gamma_size);
+	if (crtc->funcs->gamma_set)
+		crtc->funcs->gamma_set(crtc, crtc->gamma_red, crtc->gamma_green,
+				       crtc->gamma_blue, crtc->gamma_size);
 
 	drmmode_ConvertToKMode(crtc->scrn, &kmode, mode);
 
@@ -526,6 +527,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	return FALSE;
 }
 
+#ifdef OMAP_SUPPORT_GAMMA
 static void
 drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 		int size)
@@ -541,6 +543,7 @@ drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 				"failed to set gamma: %s\n", strerror(-ret));
 	}
 }
+#endif
 
 static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 		.dpms = drmmode_crtc_dpms,
@@ -549,7 +552,9 @@ static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 		.show_cursor = drmmode_show_cursor,
 		.hide_cursor = drmmode_hide_cursor,
 		.load_cursor_argb = drmmode_load_cursor_argb,
+#ifdef OMAP_SUPPORT_GAMMA
 		.gamma_set = drmmode_gamma_set,
+#endif
 };
 
 
