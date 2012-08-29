@@ -98,6 +98,16 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 		return ret;
 	}
 
+	if (width == 0 || height == 0) {
+		/* X will sometimes create an empty pixmap and then
+		 * use ModifyPixmapHeader to point it at PixData.
+		 * We'll hit this path during the CreatePixmap call.
+		 */
+		pPixmap->devPrivate.ptr = pPixData;
+		pPixmap->devKind = devKind;
+		return TRUE;
+	}
+
 	if (pPixData == omap_bo_map(pOMAP->scanout)) {
 		DEBUG_MSG("wrapping scanout buffer");
 		priv->bo = pOMAP->scanout;
