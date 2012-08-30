@@ -40,12 +40,12 @@ struct omap_bo {
 	struct omap_device *dev;
 	uint32_t handle;
 	uint32_t size;
-	int from_name;
 	void *map_addr;
-	int fb_id;
+	uint32_t fb_id;
 	uint32_t width;
 	uint32_t height;
-	uint32_t bpp;
+	uint8_t depth;
+	uint8_t bpp;
 	uint32_t pitch;
 };
 
@@ -71,7 +71,8 @@ void omap_device_del(struct omap_device *dev)
  */
 
 struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
-			uint32_t width, uint32_t height, uint32_t bpp, uint32_t flags)
+			uint32_t width, uint32_t height, uint8_t depth,
+			uint8_t bpp, uint32_t flags)
 {
 	struct drm_mode_create_dumb create_dumb;
 	struct omap_bo *new_buf;
@@ -99,43 +100,14 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 	new_buf->dev = dev;
 	new_buf->handle = create_dumb.handle;
 	new_buf->size = create_dumb.size;
-	new_buf->from_name = 0;
 	new_buf->map_addr = NULL;
 	new_buf->fb_id = 0;
 	new_buf->pitch = create_dumb.pitch;
 
 	new_buf->width = create_dumb.width;
 	new_buf->height = create_dumb.height;
+	new_buf->depth = depth;
 	new_buf->bpp = create_dumb.bpp;
-
-	return new_buf;
-}
-
-struct omap_bo *omap_bo_from_name(struct omap_device *dev, uint32_t name)
-{
-	struct omap_bo *new_buf;
-	struct drm_gem_open gem_open;
-	int res;
-
-	new_buf = malloc(sizeof(*new_buf));
-	if (!new_buf)
-		return NULL;
-
-	gem_open.name = name;
-
-	res = drmIoctl(dev->fd, DRM_IOCTL_GEM_OPEN, &gem_open);
-	if (res)
-	{
-		free(new_buf);
-		return NULL;
-	}
-
-	new_buf->dev = dev;
-	new_buf->handle = gem_open.handle;
-	new_buf->size = gem_open.size;
-	new_buf->from_name = 1;
-	new_buf->map_addr = NULL;
-	new_buf->fb_id = 0;
 
 	return new_buf;
 }
@@ -143,6 +115,7 @@ struct omap_bo *omap_bo_from_name(struct omap_device *dev, uint32_t name)
 void omap_bo_del(struct omap_bo *bo)
 {
 	int res;
+	struct drm_mode_destroy_dumb destroy_dumb;
 
 	if (!bo)
 		return;
@@ -158,22 +131,9 @@ void omap_bo_del(struct omap_bo *bo)
 		assert(res == 0);
 	}
 
-	if (bo->from_name)
-	{
-		struct drm_gem_close gem_close;
 
-		gem_close.handle = bo->handle;
-
-		res = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_CLOSE, &gem_close);
-	}
-	else
-	{
-		struct drm_mode_destroy_dumb destroy_dumb;
-
-		destroy_dumb.handle = bo->handle;
-
-		res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_dumb);
-	}
+	destroy_dumb.handle = bo->handle;
+	res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_dumb);
 	assert(res == 0);
 	free(bo);
 }
@@ -263,10 +223,20 @@ int omap_get_param(struct omap_device *dev, uint64_t param, uint64_t *value)
 	return 0;
 }
 
-void omap_bo_set_fb(struct omap_bo *bo, uint32_t fb_id)
+int omap_bo_add_fb(struct omap_bo *bo)
 {
+	int ret;
+
 	assert(bo->fb_id == 0);
-	bo->fb_id = fb_id;
+
+	ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height, bo->depth,
+			bo->bpp, bo->pitch, bo->handle, &bo->fb_id);
+	if (ret < 0) {
+		xf86DrvMsg(-1, X_ERROR, "Could not add fb to bo %d", ret);
+		bo->fb_id = 0;
+		return ret;
+	}
+	return 0;
 }
 
 uint32_t omap_bo_get_fb(struct omap_bo *bo)
