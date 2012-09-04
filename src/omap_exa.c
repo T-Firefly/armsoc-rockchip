@@ -225,12 +225,24 @@ static inline enum omap_gem_op idx2op(int index)
 _X_EXPORT Bool
 OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 {
+	ScrnInfoPtr pScrn;
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 
 	pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
 	if (!pPixmap->devPrivate.ptr) {
 		return FALSE;
 	}
+
+	pScrn = pix2scrn(pPixmap);
+	if (!pScrn)
+		return FALSE;
+
+	/* If we're in per-crtc flip mode (ie: not using the scanout buffer),
+	 * make sure we enter blit mode before access. This function copies
+	 * the crtc scanouts back to the One True scanout buffer.
+	 */
+	if (!drmmode_set_blit_mode(pScrn))
+		return FALSE;
 
 	/* wait for blits complete.. note we could be a bit more clever here
 	 * for non-DRI2 buffers and use separate OMAP{Prepare,Finish}GPUAccess()

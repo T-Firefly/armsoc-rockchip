@@ -92,10 +92,23 @@ dri2draw(DrawablePtr pDraw, DRI2BufferPtr buf)
 }
 
 static Bool
-canflip(DrawablePtr pDraw)
+canflip(DrawablePtr pDraw, struct omap_bo *back_bo)
 {
-	return (pDraw->type == DRAWABLE_WINDOW) &&
-			DRI2CanFlip(pDraw);
+	ScreenPtr pScreen = pDraw->pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+
+	if (pDraw->type != DRAWABLE_WINDOW)
+		return FALSE;
+
+	if (back_bo && (omap_bo_width(back_bo) != pDraw->width ||
+	    omap_bo_height(back_bo) != pDraw->height))
+		return FALSE;
+
+	if (drmmode_scanout_from_drawable(pOMAP->scanouts, pDraw))
+		return TRUE;
+
+	return FALSE;
 }
 
 static inline Bool
@@ -111,7 +124,7 @@ static PixmapPtr
 createpix(DrawablePtr pDraw)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	int flags = canflip(pDraw) ? OMAP_CREATE_PIXMAP_SCANOUT : 0;
+	int flags = canflip(pDraw, NULL) ? OMAP_CREATE_PIXMAP_SCANOUT : 0;
 	return pScreen->CreatePixmap(pScreen,
 			pDraw->width, pDraw->height, pDraw->depth, flags);
 }
@@ -207,7 +220,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	 * A: attempt to create a drm_framebuffer, and if that fails then the
 	 * hw must not support.. then fall back to blitting
 	 */
-	if (canflip(pDraw) && attachment != DRI2BufferFrontLeft) {
+	if (canflip(pDraw, NULL) && attachment != DRI2BufferFrontLeft) {
 		int ret = omap_bo_add_fb(bo);
 		if (ret) {
 			/* to-bad, so-sad, we can't flip */
@@ -345,6 +358,9 @@ struct _OMAPDRISwapCmd {
 	DRI2SwapEventPtr func;
 	int swapCount;
 	int flags;
+	int crtc_id;
+	int x;
+	int y;
 	void *data;
 };
 
@@ -393,7 +409,9 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 			if (cmd->type != DRI2_BLIT_COMPLETE && (cmd->flags & OMAP_SWAP_FAKE_FLIP) == 0) {
 				dst_priv = exaGetPixmapDriverPrivate(draw2pix(dri2draw(pDraw, cmd->pDstBuffer)));
 				assert(cmd->type == DRI2_FLIP_COMPLETE);
-				set_scanout_bo(pScrn, dst_priv->bo);
+
+				drmmode_scanout_set(pOMAP->scanouts,
+						cmd->x, cmd->y, dst_priv->bo);
 			}
 		}
 	}
@@ -446,8 +464,31 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	cmd->flags = 0;
 	cmd->func = func;
 	cmd->data = data;
+	cmd->x = pDraw->x;
+	cmd->y = pDraw->y;
 
 	DEBUG_MSG("%d -> %d", pSrcBuffer->attachment, pDstBuffer->attachment);
+
+	src_priv = exaGetPixmapDriverPrivate(src->pPixmap);
+	dst_priv = exaGetPixmapDriverPrivate(dst->pPixmap);
+
+	new_canflip = canflip(pDraw, src_priv->bo);
+
+	/* If we can flip using a crtc scanout, switch the front buffer bo */
+	if (new_canflip && !pOMAP->has_resized) {
+		dst_priv->bo = drmmode_scanout_from_drawable(pOMAP->scanouts,
+				pDraw)->bo;
+		if (!drmmode_set_flip_mode(pScrn)) {
+			ERROR_MSG("Could not set flip mode\n");
+			return FALSE;
+		}
+	} else {
+		dst_priv->bo = pOMAP->scanout;
+		if (!drmmode_set_blit_mode(pScrn)) {
+			ERROR_MSG("Could not set blit mode\n");
+			return FALSE;
+		}
+	}
 
 	/* obtain extra ref on buffers to avoid them going away while we await
 	 * the page flip event:
@@ -456,13 +497,9 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPDRI2ReferenceBuffer(pDstBuffer);
 	pOMAP->pending_flips++;
 
-	src_priv = exaGetPixmapDriverPrivate(src->pPixmap);
-	dst_priv = exaGetPixmapDriverPrivate(dst->pPixmap);
-
 	src_fb_id = omap_bo_get_fb(src_priv->bo);
 	dst_fb_id = omap_bo_get_fb(dst_priv->bo);
 
-	new_canflip = canflip(pDraw);
 	if ((src->previous_canflip != -1 && src->previous_canflip != new_canflip) ||
 	    (dst->previous_canflip != -1 && dst->previous_canflip != new_canflip) ||
 	    (pOMAP->has_resized))
@@ -487,7 +524,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 
 	omap_bo_reference(src_priv->bo);
 	omap_bo_reference(dst_priv->bo);
-	if (src_fb_id && dst_fb_id && canflip(pDraw) && !(pOMAP->has_resized)) {
+	if (src_fb_id && dst_fb_id && new_canflip && !(pOMAP->has_resized)) {
 		/* has_resized: On hotplug the fb size and crtc sizes arent updated
 		* hence on this event we do a copyb but flip from the next frame
 		* when the sizes are updated.

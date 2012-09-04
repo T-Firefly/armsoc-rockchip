@@ -74,6 +74,8 @@
 #define OMAP_USE_PAGE_FLIP_EVENTS	1
 /*#define OMAP_SUPPORT_GAMMA		1 -- Not supported on exynos*/
 
+#define MAX_SCANOUTS		3
+
 /**
  * This controls whether debug statements (and function "trace" enter/exit)
  * messages are sent to the log file (TRUE) or are ignored (FALSE).
@@ -111,6 +113,25 @@ extern _X_EXPORT Bool omapDebug;
 
 
 
+typedef struct _OMAPScanout
+{
+	struct omap_bo *bo;
+	int width, height, x, y;
+} OMAPScanout, *OMAPScanoutPtr;
+
+enum OMAPFlipMode
+{
+	/*
+	 * Set to invalid to guarantee the next transition to flip or blit mode
+	 * is run. This is useful on initialization where we don't know which
+	 * mode we're going to start with, but we definitely want to transition
+	 * to it.
+	 */
+	OMAP_FLIP_INVALID = 0,
+	OMAP_FLIP_ENABLED,
+	OMAP_FLIP_DISABLED,
+};
+
 /** The driver's Screen-specific, "private" data structure. */
 typedef struct _OMAPRec
 {
@@ -137,7 +158,9 @@ typedef struct _OMAPRec
 	struct omap_device	*dev;
 
 	/** Scan-out buffer. */
+	enum OMAPFlipMode	flip_mode;
 	struct omap_bo		*scanout;
+	OMAPScanout scanouts[MAX_SCANOUTS];
 
 	/** Pointer to the options for this screen. */
 	OptionInfoPtr		pOptionInfo;
@@ -214,10 +237,18 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd, int cpp);
 void drmmode_screen_init(ScrnInfoPtr pScrn);
 void drmmode_screen_fini(ScrnInfoPtr pScrn);
 void drmmode_adjust_frame(ScrnInfoPtr pScrn, int x, int y, int flags);
-Bool drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv);
+int drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv);
 void drmmode_wait_for_event(ScrnInfoPtr pScrn);
 Bool drmmode_cursor_init(ScreenPtr pScreen);
 void drmmode_copy_fb(ScrnInfoPtr pScrn);
+OMAPScanoutPtr drmmode_scanout_from_drawable(OMAPScanoutPtr scanouts,
+		DrawablePtr pDraw);
+void drmmode_scanout_set(OMAPScanoutPtr scanouts, int x, int y,
+		struct omap_bo *bo);
+int drmmode_crtc_id(xf86CrtcPtr crtc);
+int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw);
+Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn);
+Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn);
 
 
 /**

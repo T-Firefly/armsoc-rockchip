@@ -719,6 +719,9 @@ OMAPScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 		goto fail;
 	}
 
+	/* flip_mode is currently invalid */
+	pOMAP->flip_mode = OMAP_FLIP_INVALID;
+
 	/* Initialize some generic 2D drawing functions: */
 	if (!fbScreenInit(pScreen, omap_bo_map(pOMAP->scanout),
 			pScrn->virtualX, pScrn->virtualY,
