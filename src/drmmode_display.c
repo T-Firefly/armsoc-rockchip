@@ -348,6 +348,13 @@ done:
 #define CURSORW  64
 #define CURSORH  64
 
+/* Mali has trouble with the cursor overlay when the visible portion has
+ * width less than the minimum burst length, i.e. 32 bytes (8 pixels ARGB).
+ * This is a problem when the cursor is at the left or right edges of the
+ * screen.  Work around this padding the cursor on the left and right sides.
+ */
+#define CURSORPAD 8
+
 static void
 drmmode_hide_cursor(xf86CrtcPtr crtc)
 {
@@ -383,7 +390,7 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 
 	w = CURSORW;
 	h = CURSORH;
-	crtc_x = cursor->x;
+	crtc_x = cursor->x - CURSORPAD;
 	crtc_y = cursor->y;
 	src_x = 0;
 	src_y = 0;
@@ -441,7 +448,10 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-	int visible;
+	int row, visible;
+	void* dst;
+	const char* src_row;
+	char* dst_row;
 
 	if (!cursor)
 		return;
@@ -451,7 +461,17 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 	if (visible)
 		drmmode_hide_cursor(crtc);
 
-	memcpy(omap_bo_map(cursor->bo), image, omap_bo_size(cursor->bo));
+	dst = omap_bo_map(cursor->bo);
+	for (row = 0; row < CURSORH; row += 1) {
+		// we're operating with ARGB data (32bpp)
+		src_row = (const char*)image + row * 4 * (CURSORW - 2 * CURSORPAD);
+		dst_row = (char*)dst + row * 4 * CURSORW;
+
+		// copy CURSORPAD pad bytes, then data, then CURSORPAD more pad bytes
+		memset(dst_row, 0, (4 * CURSORPAD));
+		memcpy(dst_row + (4 * CURSORPAD), src_row, 4 * (CURSORW - 2 * CURSORPAD));
+		memset(dst_row + 4 * (CURSORW - CURSORPAD), 0, (4 * CURSORPAD));
+	}
 
 	if (visible)
 		drmmode_show_cursor(crtc);
@@ -472,7 +492,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	 * cursor images in the max size, so don't use width/height values
 	 * that are too big
 	 */
-	int w = CURSORW, h = CURSORH;
+	const int w = CURSORW, h = CURSORH;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
 
 	if (drmmode->cursor) {
@@ -517,7 +537,8 @@ drmmode_cursor_init(ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	if (xf86_cursors_init(pScreen, w, h, HARDWARE_CURSOR_ARGB)) {
+	// see definition of CURSORPAD
+	if (xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h, HARDWARE_CURSOR_ARGB)) {
 		INFO_MSG("HW cursor initialized");
 		drmmode->cursor = cursor;
 		return TRUE;
