@@ -653,15 +653,25 @@ done:
 	return ret;
 }
 
-#define CURSORW  64
-#define CURSORH  64
-
-/* Mali has trouble with the cursor overlay when the visible portion has
- * width less than the minimum burst length, i.e. 32 bytes (8 pixels ARGB).
- * This is a problem when the cursor is at the left or right edges of the
- * screen.  Work around this padding the cursor on the left and right sides.
+/* Two different workarounds at play here:
+ * * Mali has trouble with the cursor overlay when the visible portion has
+ *   width less than the minimum FIMD DMA burst, i.e. 32 bytes (8 pixels
+ *   ARGB).  This is a problem when the cursor is at the left or right edge
+ *   of the screen.  Work around this padding the cursor on the left and
+ *   right sides.
+ * * X has trouble with cursor dimensions that aren't a multiple of 32,
+ *   because it expects bitmask cursors to have a bit pitch the size of the
+ *   typical machine word, i.e. 32 bits.
+ * We create a 96x64 pixel cursor overlay, with 16 pixels' (64 bytes')
+ * worth of padding on each side, so we can export a 64x64 size to X as we'd
+ * like to have HW accelerated cursors at least to this size.  We stay with
+ * multiple-of-32-pixel sizes internally for efficiency since the longest FIMD
+ * DMA burst length is 128 bytes (32 pixels ARGB).
  */
-#define CURSORPAD 8
+
+#define CURSORW  96
+#define CURSORH  64
+#define CURSORPAD 16
 
 static void
 drmmode_hide_cursor(xf86CrtcPtr crtc)
