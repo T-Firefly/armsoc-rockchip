@@ -566,6 +566,10 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 			return FALSE;
 		}
 	}
+
+	/* Reset the flip mode so we ensure the CRTC's are properly setup */
+	pOMAP->flip_mode = OMAP_FLIP_INVALID;
+
 	return TRUE;
 }
 
