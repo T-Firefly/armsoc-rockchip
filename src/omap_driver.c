@@ -778,12 +778,6 @@ OMAPScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 		}
 	}
 
-	/* We need to copy the framebuffer into the screen before using it as
-	 * the VT as that will cause a moment of uninitialized framebuffer to
-	 * be drawn to the video out.
-	 */
-	drmmode_copy_fb(pScrn);
-
 	/* XXX -- Is this the right place for this?  The Intel i830 driver says:
 	 * "Must force it before EnterVT, so we are in control of VT..."
 	 */
@@ -828,6 +822,17 @@ OMAPScreenInit(int scrnIndex, ScreenPtr pScreen, int argc, char **argv)
 	wrap(pOMAP, pScreen, BlockHandler, OMAPBlockHandler);
 
 	drmmode_screen_init(pScrn);
+
+	/* We need to copy the framebuffer into the screen before using it as
+	 * scanout as that will cause a moment of uninitialized framebuffer to
+	 * be drawn to the video out.
+	 */
+	drmmode_copy_fb(pScrn);
+
+	/* The main scanout buffer (pOMAP->scanout) has valid contents now, so
+	 * we start out claiming we're in blit mode.
+	 */
+	drmmode_set_blit_mode(pScrn);
 
 	TRACE_EXIT();
 	return TRUE;
