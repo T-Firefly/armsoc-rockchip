@@ -482,6 +482,11 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			ERROR_MSG("Could not set flip mode\n");
 			return FALSE;
 		}
+		ret = omap_bo_get_name(dst_priv->bo, &pDstBuffer->name);
+		if (ret) {
+			ERROR_MSG("could not get buffer name: %d", ret);
+			return FALSE;
+		}
 	} else {
 		dst_priv->bo = pOMAP->scanout;
 		if (!drmmode_set_blit_mode(pScrn)) {
