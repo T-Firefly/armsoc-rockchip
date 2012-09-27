@@ -39,6 +39,7 @@ struct omap_device {
 struct omap_bo {
 	struct omap_device *dev;
 	uint32_t handle;
+	uint32_t name;
 	uint32_t size;
 	void *map_addr;
 	uint32_t fb_id;
@@ -79,7 +80,7 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 	struct omap_bo *new_buf;
 	int res;
 
-	new_buf = malloc(sizeof(*new_buf));
+	new_buf = calloc(1, sizeof(*new_buf));
 	if (!new_buf)
 		return NULL;
 
@@ -100,6 +101,7 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 
 	new_buf->dev = dev;
 	new_buf->handle = create_dumb.handle;
+	new_buf->name = 0;
 	new_buf->size = create_dumb.size;
 	new_buf->map_addr = NULL;
 	new_buf->fb_id = 0;
@@ -133,11 +135,13 @@ void omap_bo_del(struct omap_bo *bo)
 		assert(res == 0);
 	}
 
-
 	destroy_dumb.handle = bo->handle;
 	res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_dumb);
 	assert(res == 0);
 	free(bo);
+
+	/* bo->name does not need to be explicitly "released"
+	 */
 }
 
 void omap_bo_unreference(struct omap_bo *bo)
@@ -158,16 +162,19 @@ void omap_bo_reference(struct omap_bo *bo)
 
 int omap_bo_get_name(struct omap_bo *bo, uint32_t *name)
 {
-	int ret;
-	struct drm_gem_flink flink;
-
-	flink.handle = bo->handle;
-
-	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &flink);
-	if (ret)
-		return ret;
-
-	*name = flink.name;
+	if (bo->name == 0) {
+		struct drm_gem_flink flink;
+		int res;
+		flink.handle = bo->handle;
+		res = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &flink);
+		if (res) {
+			xf86DrvMsg(-1, X_ERROR, "_GEM_FLINK("
+			    "handle: 0x%X) failed. errno:0x%X\n", flink.handle, errno);
+		} else {
+			bo->name = flink.name;
+		}
+	}
+	*name = bo->name;
 	return 0;
 }
 

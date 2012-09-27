@@ -54,13 +54,6 @@ typedef struct {
 	PixmapPtr pPixmap;
 
 	/**
-	 * The DRI2 buffers are reference counted to avoid crashyness when the
-	 * client detaches a dri2 drawable while we are still waiting for a
-	 * page_flip event.
-	 */
-	int refcnt;
-
-	/**
 	 * The value of canflip() for the previous frame. Used so that we can tell
 	 * whether the buffer should be re-allocated, e.g into scanout-able
 	 * memory if the buffer can now be flipped.
@@ -111,15 +104,6 @@ canflip(DrawablePtr pDraw, struct omap_bo *back_bo)
 	return FALSE;
 }
 
-static inline Bool
-exchangebufs(DrawablePtr pDraw, DRI2BufferPtr a, DRI2BufferPtr b)
-{
-	OMAPPixmapExchange(draw2pix(dri2draw(pDraw, a)),
-			draw2pix(dri2draw(pDraw, b)));
-	exchange(a->name, b->name);
-	return TRUE;
-}
-
 static PixmapPtr
 createpix(DrawablePtr pDraw)
 {
@@ -168,24 +152,6 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 		 * buffer when client disconnects from drawable..
 		 */
 
-/* TODO: We don't have enough memory to allocate three physically contiguous buffers at the same time! Because all our
- * buffers are scanout-able we'll not bother allocating *another* scanout buffer and just use the one we already have
- * and save that extra buffer size */
-#if 0
-		if (canflip(pDraw) && !has_dmm(pOMAP) &&
-				(OMAPPixmapBo(pPixmap) != pOMAP->scanout)) {
-
-			/* need to re-allocate pixmap to get a scanout capable buffer */
-			PixmapPtr pNewPix = createpix(pDraw);
-
-			// TODO copy contents..
-
-			OMAPPixmapExchange(pPixmap, pNewPix);
-
-			pScreen->DestroyPixmap(pNewPix);
-		}
-#endif
-
 		pPixmap->refcnt++;
 	} else {
 		pPixmap = createpix(pDraw);
@@ -204,7 +170,6 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	DRIBUF(buf)->cpp = pPixmap->drawable.bitsPerPixel / 8;
 	DRIBUF(buf)->format = format;
 	DRIBUF(buf)->flags = 0;
-	buf->refcnt = 1;
 	buf->pPixmap = pPixmap;
 	buf->previous_canflip = -1;
 
@@ -248,21 +213,11 @@ OMAPDRI2DestroyBuffer(DrawablePtr pDraw, DRI2BufferPtr buffer)
 	ScreenPtr pScreen = buf->pPixmap->drawable.pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 
-	if (--buf->refcnt > 0)
-		return;
-
 	DEBUG_MSG("pDraw=%p, buffer=%p", pDraw, buffer);
 
 	pScreen->DestroyPixmap(buf->pPixmap);
 
 	free(buf);
-}
-
-static void
-OMAPDRI2ReferenceBuffer(DRI2BufferPtr buffer)
-{
-	OMAPDRI2BufferPtr buf = OMAPBUF(buffer);
-	buf->refcnt++;
 }
 
 /**
@@ -353,8 +308,8 @@ struct _OMAPDRISwapCmd {
 	 * the drawable can be destroyed while we wait for page flip event:
 	 */
 	XID draw_id;
-	DRI2BufferPtr pDstBuffer;
-	DRI2BufferPtr pSrcBuffer;
+	PixmapPtr pDstPixmap;
+	PixmapPtr pSrcPixmap;
 	DRI2SwapEventPtr func;
 	int swapCount;
 	int flags;
@@ -362,12 +317,6 @@ struct _OMAPDRISwapCmd {
 	int x;
 	int y;
 	void *data;
-};
-
-static const char *swap_names[] = {
-		[DRI2_EXCHANGE_COMPLETE] = "exchange",
-		[DRI2_BLIT_COMPLETE] = "blit",
-		[DRI2_FLIP_COMPLETE] = "flip,"
 };
 
 void
@@ -384,35 +333,30 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 		return;
 
 	if ((cmd->flags & OMAP_SWAP_FAIL) == 0) {
-		DEBUG_MSG("%s complete: %d -> %d", swap_names[cmd->type],
-				cmd->pSrcBuffer->attachment, cmd->pDstBuffer->attachment);
-
 		status = dixLookupDrawable(&pDraw, cmd->draw_id, serverClient,
 				M_ANY, DixWriteAccess);
 
 		if (status == Success) {
 			if (cmd->type != DRI2_BLIT_COMPLETE && (cmd->flags & OMAP_SWAP_FAKE_FLIP) == 0) {
 				assert(cmd->type == DRI2_FLIP_COMPLETE);
-				exchangebufs(pDraw, cmd->pSrcBuffer, cmd->pDstBuffer);
+				OMAPPixmapExchange(cmd->pSrcPixmap, cmd->pDstPixmap);
 			}
 
 			DRI2SwapComplete(cmd->client, pDraw, 0, 0, 0, cmd->type,
 					cmd->func, cmd->data);
 
 			if (cmd->type != DRI2_BLIT_COMPLETE && (cmd->flags & OMAP_SWAP_FAKE_FLIP) == 0) {
-				dst_priv = exaGetPixmapDriverPrivate(draw2pix(dri2draw(pDraw, cmd->pDstBuffer)));
 				assert(cmd->type == DRI2_FLIP_COMPLETE);
-
-				drmmode_scanout_set(pOMAP->scanouts,
-						cmd->x, cmd->y, dst_priv->bo);
+				dst_priv = exaGetPixmapDriverPrivate(cmd->pDstPixmap);
+				drmmode_scanout_set(pOMAP->scanouts, cmd->x, cmd->y, dst_priv->bo);
 			}
 		}
 	}
 
 	/* drop extra refcnt we obtained prior to swap:
 	 */
-	OMAPDRI2DestroyBuffer(pDraw, cmd->pSrcBuffer);
-	OMAPDRI2DestroyBuffer(pDraw, cmd->pDstBuffer);
+	pScreen->DestroyPixmap(cmd->pSrcPixmap);
+	pScreen->DestroyPixmap(cmd->pDstPixmap);
 	pOMAP->pending_flips--;
 
 	free(cmd);
@@ -449,8 +393,8 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	cmd->client = client;
 	cmd->pScreen = pScreen;
 	cmd->draw_id = pDraw->id;
-	cmd->pSrcBuffer = pSrcBuffer;
-	cmd->pDstBuffer = pDstBuffer;
+	cmd->pSrcPixmap = draw2pix(dri2draw(pDraw, pSrcBuffer));
+	cmd->pDstPixmap = draw2pix(dri2draw(pDraw, pDstBuffer));
 	cmd->swapCount = 0;
 	cmd->flags = 0;
 	cmd->func = func;
@@ -478,11 +422,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			ERROR_MSG("Could not set flip mode\n");
 			return FALSE;
 		}
-		ret = omap_bo_get_name(dst_priv->bo, &pDstBuffer->name);
-		if (ret) {
-			ERROR_MSG("could not get buffer name: %d", ret);
-			return FALSE;
-		}
 	} else {
 		omap_bo_reference(pOMAP->scanout);
 		omap_bo_unreference(dst_priv->bo);
@@ -493,11 +432,11 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		}
 	}
 
-	/* obtain extra ref on buffers to avoid them going away while we await
+	/* obtain extra ref on pixmaps to avoid them going away while we await
 	 * the page flip event:
 	 */
-	OMAPDRI2ReferenceBuffer(pSrcBuffer);
-	OMAPDRI2ReferenceBuffer(pDstBuffer);
+	cmd->pSrcPixmap->refcnt++;
+	cmd->pDstPixmap->refcnt++;
 	pOMAP->pending_flips++;
 
 	src_fb_id = omap_bo_get_fb(src_priv->bo);
@@ -608,6 +547,20 @@ OMAPDRI2ScheduleWaitMSC(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
 }
 
 /**
+ * Sync up X's view of a DRI2BufferPtr with our internal reckoning of it.
+ *
+ * We do some BO renaming and other tricksy businesses that X needs to know
+ * about.  Do the sync-up here.
+ */
+static void
+OMAPDRI2ReuseBufferNotify(DrawablePtr pDraw, DRI2BufferPtr buffer)
+{
+	OMAPDRI2BufferPtr omap_buffer = OMAPBUF(buffer);
+	OMAPPixmapPrivPtr omap_priv = exaGetPixmapDriverPrivate(omap_buffer->pPixmap);
+	omap_bo_get_name(omap_priv->bo, &buffer->name);
+}
+
+/**
  * The DRI2 ScreenInit() function.. register our handler fxns w/ DRI2 core
  */
 Bool
@@ -616,17 +569,22 @@ OMAPDRI2ScreenInit(ScreenPtr pScreen)
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DRI2InfoRec info = {
-			.version			= 5,
-			.fd 				= pOMAP->drmFD,
-			.driverName			= "armsoc",
-			.deviceName			= pOMAP->deviceName,
-			.CreateBuffer		= OMAPDRI2CreateBuffer,
-			.DestroyBuffer		= OMAPDRI2DestroyBuffer,
-			.CopyRegion			= OMAPDRI2CopyRegion,
-			.ScheduleSwap		= OMAPDRI2ScheduleSwap,
-			.ScheduleWaitMSC	= OMAPDRI2ScheduleWaitMSC,
-			.GetMSC				= OMAPDRI2GetMSC,
-			.AuthMagic			= drmAuthMagic,
+			.version           = 6,
+			.fd                = pOMAP->drmFD,
+			.driverName        = "armsoc",
+			.deviceName        = pOMAP->deviceName,
+			.CreateBuffer      = &OMAPDRI2CreateBuffer,
+			.DestroyBuffer     = &OMAPDRI2DestroyBuffer,
+			.CopyRegion        = &OMAPDRI2CopyRegion,
+			.Wait              = NULL,
+			.ScheduleSwap      = &OMAPDRI2ScheduleSwap,
+			.GetMSC            = &OMAPDRI2GetMSC,
+			.ScheduleWaitMSC   = &OMAPDRI2ScheduleWaitMSC,
+			.numDrivers        = 0,
+			.driverNames       = NULL,
+			.AuthMagic         = &drmAuthMagic,
+			.ReuseBufferNotify = &OMAPDRI2ReuseBufferNotify,
+			.SwapLimitValidate = NULL,
 	};
 	int minor = 1, major = 0;
 
