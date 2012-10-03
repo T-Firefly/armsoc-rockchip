@@ -443,15 +443,22 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 	/* Only copy if we had valid previous contents */
 	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
 		for (i = 0; i < MAX_SCANOUTS; i++) {
+			int height, pitch;
 			scanout = &pOMAP->scanouts[i];
 
 			if (!scanout->bo)
 				continue;
 
+			height = min(omap_bo_height(scanout->bo),
+				     omap_bo_height(pOMAP->scanout) - scanout->y);
+			pitch = min(omap_bo_pitch(scanout->bo),
+				    omap_bo_pitch(pOMAP->scanout) -
+				    scanout->x * omap_bo_bpp(pOMAP->scanout) / 8);
+
 			ret = drmmode_copy_bo(pScrn, scanout->bo, 0, 0, pOMAP->scanout,
 					scanout->x, scanout->y,
-					omap_bo_pitch(scanout->bo),
-					omap_bo_height(scanout->bo));
+					pitch,
+					height);
 			if (ret) {
 				ERROR_MSG("Copy crtc to scanout failed");
 				return FALSE;
@@ -489,15 +496,22 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 	/* Only copy if we had valid previous contents */
 	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
 		for (i = 0; i < MAX_SCANOUTS; i++) {
+			int height, pitch;
 			scanout = &pOMAP->scanouts[i];
 
 			if (!scanout->bo)
 				continue;
 
+			height = min(omap_bo_height(scanout->bo),
+				     omap_bo_height(pOMAP->scanout) - scanout->y);
+			pitch = min(omap_bo_pitch(scanout->bo),
+			            omap_bo_pitch(pOMAP->scanout) -
+				    scanout->x * omap_bo_bpp(pOMAP->scanout) / 8);
+
 			ret = drmmode_copy_bo(pScrn, pOMAP->scanout, scanout->x,
 					scanout->y, scanout->bo, 0, 0,
-					omap_bo_pitch(scanout->bo),
-					omap_bo_height(scanout->bo));
+					pitch,
+					height);
 			if (ret) {
 				ERROR_MSG("Copy scanout to crtc failed");
 				return FALSE;
