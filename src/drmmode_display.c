@@ -190,6 +190,7 @@ drmmode_scanout_add(OMAPScanoutPtr scanouts, xf86CrtcPtr crtc,
 		if (s->bo)
 			continue;
 
+		omap_bo_reference(bo);
 		s->x = crtc->x;
 		s->y = crtc->y;
 		s->width = crtc->mode.HDisplay;
@@ -213,6 +214,8 @@ drmmode_scanout_set(OMAPScanoutPtr scanouts, int x, int y, struct omap_bo *bo)
 		return;
 	}
 
+	omap_bo_reference(bo);
+	omap_bo_unreference(s->bo);
 	s->bo = bo;
 }
 
@@ -585,6 +588,11 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 			ERROR_MSG("Add scanout failed\n");
 			return FALSE;
 		}
+		/*
+		 * drmmode_scanout_add() adds a reference but we already
+		 * have a reference from the fresh allocation.
+		 */
+		omap_bo_unreference(bo);
 	}
 
 	/* Reset the flip mode so we ensure the CRTC's are properly setup */
@@ -1390,16 +1398,6 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 	return;
 }
 
-void set_scanout_bo(ScrnInfoPtr pScrn, struct omap_bo *bo)
-{
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-
-	/* It had better have a framebuffer if we're scanning it out */
-	assert(omap_bo_get_fb(bo));
-
-	pOMAP->scanout = bo;
-}
-
 static Bool
 drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 {
@@ -1421,22 +1419,23 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 	      || (height != omap_bo_height(pOMAP->scanout))
 	      || (pScrn->bitsPerPixel != omap_bo_bpp(pOMAP->scanout)) ) {
 
-		/* delete old scanout buffer */
-		omap_bo_unreference(pOMAP->scanout);
-		pOMAP->has_resized = TRUE;
 		DEBUG_MSG("allocating new scanout buffer: %dx%d",
 				width, height);
 
 		/* allocate new scanout buffer */
-		new_scanout = drmmode_new_fb(pOMAP, width, height, pScrn->depth,
-				pScrn->bitsPerPixel);
+		new_scanout = drmmode_new_fb(pOMAP, width,
+					     height, pScrn->depth,
+					     pScrn->bitsPerPixel);
 		if (!new_scanout) {
 			ERROR_MSG("Error reallocating scanout buffer\n");
 			return FALSE;
 		}
+
 		pitch = omap_bo_pitch(new_scanout);
 
-		set_scanout_bo(pScrn, new_scanout);
+		pOMAP->has_resized = TRUE;
+		omap_bo_unreference(pOMAP->scanout);
+		pOMAP->scanout = new_scanout;
 
 		pScrn->displayWidth = pitch / (pScrn->bitsPerPixel / 8);
 	}else{

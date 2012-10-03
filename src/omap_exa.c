@@ -112,8 +112,11 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 		return FALSE;
 	}
 
-	if (pPixData == omap_bo_map(pOMAP->scanout))
+	if (pPixData == omap_bo_map(pOMAP->scanout)) {
+		omap_bo_reference(pOMAP->scanout);
+		omap_bo_unreference(priv->bo);
 		priv->bo = pOMAP->scanout;
+	}
 
 	if (pPixmap->usage_hint & OMAP_CREATE_PIXMAP_SCANOUT)
 		flags |= OMAP_BO_SCANOUT;

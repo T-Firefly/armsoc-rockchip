@@ -378,17 +378,10 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DrawablePtr pDraw = NULL;
 	int status;
-	OMAPPixmapPrivPtr src_priv, dst_priv;
-	struct omap_bo *old_src_bo, *old_dst_bo;
+	OMAPPixmapPrivPtr dst_priv;
 
 	if (--cmd->swapCount > 0)
 		return;
-
-	/* Save the old source bo for unreference below */
-	src_priv = exaGetPixmapDriverPrivate(OMAPBUF(cmd->pSrcBuffer)->pPixmap);
-	dst_priv = exaGetPixmapDriverPrivate(OMAPBUF(cmd->pDstBuffer)->pPixmap);
-	old_src_bo = src_priv->bo;
-	old_dst_bo = dst_priv->bo;
 
 	if ((cmd->flags & OMAP_SWAP_FAIL) == 0) {
 		DEBUG_MSG("%s complete: %d -> %d", swap_names[cmd->type],
@@ -420,8 +413,6 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 	 */
 	OMAPDRI2DestroyBuffer(pDraw, cmd->pSrcBuffer);
 	OMAPDRI2DestroyBuffer(pDraw, cmd->pDstBuffer);
-	omap_bo_unreference(old_src_bo);
-	omap_bo_unreference(old_dst_bo);
 	pOMAP->pending_flips--;
 
 	free(cmd);
@@ -476,8 +467,13 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 
 	/* If we can flip using a crtc scanout, switch the front buffer bo */
 	if (new_canflip && !pOMAP->has_resized) {
+		struct omap_bo *old_bo;
+
+		old_bo = dst_priv->bo;
 		dst_priv->bo = drmmode_scanout_from_drawable(pOMAP->scanouts,
 				pDraw)->bo;
+		omap_bo_reference(dst_priv->bo);
+		omap_bo_unreference(old_bo);
 		if (!drmmode_set_flip_mode(pScrn)) {
 			ERROR_MSG("Could not set flip mode\n");
 			return FALSE;
@@ -488,6 +484,8 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			return FALSE;
 		}
 	} else {
+		omap_bo_reference(pOMAP->scanout);
+		omap_bo_unreference(dst_priv->bo);
 		dst_priv->bo = pOMAP->scanout;
 		if (!drmmode_set_blit_mode(pScrn)) {
 			ERROR_MSG("Could not set blit mode\n");
@@ -527,8 +525,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	src->previous_canflip = new_canflip;
 	dst->previous_canflip = new_canflip;
 
-	omap_bo_reference(src_priv->bo);
-	omap_bo_reference(dst_priv->bo);
 	if (src_fb_id && dst_fb_id && new_canflip && !(pOMAP->has_resized)) {
 		/* has_resized: On hotplug the fb size and crtc sizes arent updated
 		* hence on this event we do a copyb but flip from the next frame
