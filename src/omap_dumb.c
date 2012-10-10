@@ -201,6 +201,11 @@ uint32_t omap_bo_pitch(struct omap_bo *bo)
 	return bo->pitch;
 }
 
+uint32_t omap_bo_depth(struct omap_bo *bo)
+{
+	return bo->depth;
+}
+
 void *omap_bo_addr(struct omap_bo *bo)
 {
 	return bo->map_addr;

@@ -542,6 +542,48 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
+static Bool drmmode_need_update_scanouts(ScrnInfoPtr pScrn)
+{
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	xf86CrtcPtr crtc;
+	DisplayModeRec mode;
+	int found = 0;
+	int count = 0;
+	int num_crtc = 0;
+	int i, j;
+
+	for (i = 0; i < xf86_config->num_crtc; i++) {
+		crtc = xf86_config->crtc[i];
+
+		if (!crtc->enabled)
+			continue;
+
+		mode = crtc->mode;
+
+		num_crtc++;
+		for (j = 0; j < MAX_SCANOUTS; j++) {
+
+			OMAPScanoutPtr scanout = &pOMAP->scanouts[j];
+			struct omap_bo *bo = scanout->bo;
+			if (!bo)
+				continue;
+
+			if (mode.HDisplay == omap_bo_width(bo) &&
+			    mode.VDisplay == omap_bo_height(bo) &&
+			    crtc->x == scanout->x &&
+			    crtc->y == scanout->y &&
+			    pScrn->depth == omap_bo_depth(bo) &&
+			    (found & 1 << j) == 0) {
+				found |= 1 << j;
+				count++;
+			}
+		}
+	}
+
+	return (count != num_crtc);
+}
+
 static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
@@ -550,6 +592,10 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86CrtcPtr crtc;
 	struct omap_bo *bo;
+
+	/* Check if we already have the right scanouts available */
+	if (!drmmode_need_update_scanouts(pScrn))
+		return TRUE;
 
 	/* Delete all scanouts, we'll reallocate below */
 	for (i = 0; i < MAX_SCANOUTS; i++) {
