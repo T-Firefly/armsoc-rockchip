@@ -593,6 +593,9 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 	xf86CrtcPtr crtc;
 	struct omap_bo *bo;
 
+	/* Reset the flip mode so we ensure the CRTC's are properly setup */
+	pOMAP->flip_mode = OMAP_FLIP_INVALID;
+
 	/* Check if we already have the right scanouts available */
 	if (!drmmode_need_update_scanouts(pScrn))
 		return TRUE;
@@ -640,9 +643,6 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 		 */
 		omap_bo_unreference(bo);
 	}
-
-	/* Reset the flip mode so we ensure the CRTC's are properly setup */
-	pOMAP->flip_mode = OMAP_FLIP_INVALID;
 
 	return TRUE;
 }
