@@ -192,6 +192,25 @@ static inline enum omap_gem_op idx2op(int index)
 	}
 }
 
+static void* OMAPMapBuffer(OMAPPtr pOMAP, struct omap_bo* bo)
+{
+	int i;
+
+	if (!bo)
+		return NULL;
+
+	/* If this is one of our scanouts, give back the main scanout.
+	 * We don't want 2D acceleration to ever touch the per-crtc
+	 * scanouts.
+	 */
+	for (i = 0; i < MAX_SCANOUTS; i++)
+		if (pOMAP->scanouts[i].bo &&
+			pOMAP->scanouts[i].bo == bo)
+			return omap_bo_map(pOMAP->scanout);
+
+	return omap_bo_map(bo);
+}
+
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
  *
@@ -228,17 +247,15 @@ static inline enum omap_gem_op idx2op(int index)
 _X_EXPORT Bool
 OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 {
-	ScrnInfoPtr pScrn;
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 
-	pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+	pPixmap->devPrivate.ptr = OMAPMapBuffer(pOMAP, priv->bo);
+
 	if (!pPixmap->devPrivate.ptr) {
 		return FALSE;
 	}
-
-	pScrn = pix2scrn(pPixmap);
-	if (!pScrn)
-		return FALSE;
 
 	/* If we're in per-crtc flip mode (ie: not using the scanout buffer),
 	 * make sure we enter blit mode before access. This function copies
