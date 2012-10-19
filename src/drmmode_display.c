@@ -417,8 +417,8 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		return -EIO;
 	}
 
-	src += src_y * omap_bo_pitch(src_bo) + src_x * omap_bo_bpp(src_bo) / 8;
-	dst += dst_y * omap_bo_pitch(dst_bo) + dst_x * omap_bo_bpp(dst_bo) / 8;
+	src += src_y * omap_bo_pitch(src_bo) + src_x * omap_bo_Bpp(src_bo);
+	dst += dst_y * omap_bo_pitch(dst_bo) + dst_x * omap_bo_Bpp(dst_bo);
 	for (y = 0; y < height; y++) {
 		memcpy(dst, src, pitch);
 
@@ -456,7 +456,7 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 				     omap_bo_height(pOMAP->scanout) - scanout->y);
 			pitch = min(omap_bo_pitch(scanout->bo),
 				    omap_bo_pitch(pOMAP->scanout) -
-				    scanout->x * omap_bo_bpp(pOMAP->scanout) / 8);
+				    scanout->x * omap_bo_Bpp(pOMAP->scanout));
 
 			ret = drmmode_copy_bo(pScrn, scanout->bo, 0, 0, pOMAP->scanout,
 					scanout->x, scanout->y,
@@ -509,7 +509,7 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 				     omap_bo_height(pOMAP->scanout) - scanout->y);
 			pitch = min(omap_bo_pitch(scanout->bo),
 			            omap_bo_pitch(pOMAP->scanout) -
-				    scanout->x * omap_bo_bpp(pOMAP->scanout) / 8);
+				    scanout->x * omap_bo_Bpp(pOMAP->scanout));
 
 			ret = drmmode_copy_bo(pScrn, pOMAP->scanout, scanout->x,
 					scanout->y, scanout->bo, 0, 0,
@@ -1486,7 +1486,7 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 		omap_bo_unreference(pOMAP->scanout);
 		pOMAP->scanout = new_scanout;
 
-		pScrn->displayWidth = pitch / (pScrn->bitsPerPixel / 8);
+		pScrn->displayWidth = pitch / ((pScrn->bitsPerPixel + 7) / 8);
 	}else{
 		pitch = omap_bo_pitch(pOMAP->scanout);
 	}
@@ -1763,7 +1763,7 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 void drmmode_copy_fb(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	uint32_t dst_pitch = pScrn->displayWidth * (pScrn->bitsPerPixel / 8);
+	uint32_t dst_pitch = pScrn->displayWidth * ((pScrn->bitsPerPixel + 7) / 8);
 	uint32_t src_pitch;
 	unsigned int src_size;
 	unsigned char *dst, *src, *srcp;
@@ -1798,7 +1798,7 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	src_pitch = pScrn->virtualX * (vinfo.bits_per_pixel / 8);
+	src_pitch = pScrn->virtualX * ((vinfo.bits_per_pixel + 7) / 8);
 	src_size = pScrn->virtualY * src_pitch;
 
 	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
