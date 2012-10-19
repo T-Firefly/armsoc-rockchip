@@ -393,18 +393,48 @@ out:
 	return ret;
 }
 
+static void
+drmmode_copy_from_to(const uint8_t *src, int src_x, int src_y, int src_pitch,
+		     int src_height, uint8_t *dst, int dst_x, int dst_y,
+		     int dst_pitch, int dst_height)
+{
+	int y;
+	int src_x_start = max(dst_x - src_x, 0);
+	int dst_x_start = max(src_x - dst_x, 0);
+	int src_y_start = max(dst_y - src_y, 0);
+	int dst_y_start = max(src_y - dst_y, 0);
+	int pitch = min(src_pitch - src_x_start, dst_pitch - dst_x_start);
+	int height = min(src_height - src_y_start, dst_height - dst_y_start);
+
+	if (pitch <= 0 || height <= 0)
+		return;
+
+	src += src_y_start * src_pitch + src_x_start;
+	dst += dst_y_start * dst_pitch + dst_x_start;
+	for (y = 0; y < height; y++, src += src_pitch, dst += dst_pitch)
+		memcpy(dst, src, pitch);
+}
+
+/*
+ * Copy region of src buffer located at (src_x, src_y) that overlaps the dst
+ * buffer at dst_x, dst_y.
+ * This function does no conversions, so it assumes same bpp and depth.
+ * It also assumes the two regions are non-overlapping memory areas, even though
+ * they may overlap in pixel space.
+ */
 static int
 drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
-		struct omap_bo *dst_bo, int dst_x, int dst_y, int pitch,
-		int height)
+		struct omap_bo *dst_bo, int dst_x, int dst_y)
 {
-	unsigned char *dst, *src;
-	int y;
+	void *dst;
+	const void *src;
 
 	if (!src_bo || !dst_bo) {
 		ERROR_MSG("copy_bo received invalid arguments\n");
 		return -EINVAL;
 	}
+
+	assert(omap_bo_bpp(src_bo) == omap_bo_bpp(dst_bo));
 
 	src = omap_bo_map(src_bo);
 	if (!src) {
@@ -417,14 +447,10 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		return -EIO;
 	}
 
-	src += src_y * omap_bo_pitch(src_bo) + src_x * omap_bo_Bpp(src_bo);
-	dst += dst_y * omap_bo_pitch(dst_bo) + dst_x * omap_bo_Bpp(dst_bo);
-	for (y = 0; y < height; y++) {
-		memcpy(dst, src, pitch);
-
-		src += omap_bo_pitch(src_bo);
-		dst += omap_bo_pitch(dst_bo);
-	}
+	drmmode_copy_from_to(src, src_x * omap_bo_Bpp(src_bo), src_y,
+			     omap_bo_pitch(src_bo), omap_bo_height(src_bo),
+			     dst, dst_x * omap_bo_Bpp(dst_bo), dst_y,
+			     omap_bo_pitch(dst_bo), omap_bo_height(dst_bo));
 
 	omap_bo_cpu_fini(src_bo, 0);
 	omap_bo_cpu_fini(dst_bo, 0);
@@ -446,22 +472,13 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 	/* Only copy if we had valid previous contents */
 	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
 		for (i = 0; i < MAX_SCANOUTS; i++) {
-			int height, pitch;
 			scanout = &pOMAP->scanouts[i];
 
 			if (!scanout->bo)
 				continue;
 
-			height = min(omap_bo_height(scanout->bo),
-				     omap_bo_height(pOMAP->scanout) - scanout->y);
-			pitch = min(omap_bo_pitch(scanout->bo),
-				    omap_bo_pitch(pOMAP->scanout) -
-				    scanout->x * omap_bo_Bpp(pOMAP->scanout));
-
-			ret = drmmode_copy_bo(pScrn, scanout->bo, 0, 0, pOMAP->scanout,
-					scanout->x, scanout->y,
-					pitch,
-					height);
+			ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
+					      scanout->y, pOMAP->scanout, 0, 0);
 			if (ret) {
 				ERROR_MSG("Copy crtc to scanout failed");
 				return FALSE;
@@ -499,22 +516,14 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 	/* Only copy if we had valid previous contents */
 	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
 		for (i = 0; i < MAX_SCANOUTS; i++) {
-			int height, pitch;
 			scanout = &pOMAP->scanouts[i];
 
 			if (!scanout->bo)
 				continue;
 
-			height = min(omap_bo_height(scanout->bo),
-				     omap_bo_height(pOMAP->scanout) - scanout->y);
-			pitch = min(omap_bo_pitch(scanout->bo),
-			            omap_bo_pitch(pOMAP->scanout) -
-				    scanout->x * omap_bo_Bpp(pOMAP->scanout));
-
-			ret = drmmode_copy_bo(pScrn, pOMAP->scanout, scanout->x,
-					scanout->y, scanout->bo, 0, 0,
-					pitch,
-					height);
+			ret = drmmode_copy_bo(pScrn, pOMAP->scanout, 0, 0,
+					      scanout->bo, scanout->x,
+					      scanout->y);
 			if (ret) {
 				ERROR_MSG("Copy scanout to crtc failed");
 				return FALSE;
@@ -1766,11 +1775,9 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 	uint32_t dst_pitch = pScrn->displayWidth * ((pScrn->bitsPerPixel + 7) / 8);
 	uint32_t src_pitch;
 	unsigned int src_size;
-	unsigned char *dst, *src, *srcp;
+	unsigned char *dst, *src;
 	struct fb_var_screeninfo vinfo;
 	int fd;
-	int y;
-	int min_y, min_pitch;
 
 	if (!(dst = omap_bo_map(pOMAP->scanout))) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -1808,14 +1815,10 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	min_y = pScrn->virtualY > vinfo.yres ? vinfo.yres : pScrn->virtualY;
-	min_pitch = dst_pitch > src_pitch ? src_pitch : dst_pitch;
-	srcp = src;
-	for(y = 0; y < min_y; y++) {
-		memcpy(dst, srcp, min_pitch);
-		dst += dst_pitch;
-		srcp += src_pitch;
-	}
+	/* Copy from virtual or visual fb?
+	   Is dst height vinfo.yres? or pScrn->displayHeight? */
+	drmmode_copy_from_to(src, 0, 0, src_pitch, pScrn->virtualY,
+			     dst, 0, 0, dst_pitch, vinfo.yres);
 
 	omap_bo_cpu_fini(pOMAP->scanout, 0);
 
