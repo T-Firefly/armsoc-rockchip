@@ -1805,8 +1805,8 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	src_pitch = pScrn->virtualX * ((vinfo.bits_per_pixel + 7) / 8);
-	src_size = pScrn->virtualY * src_pitch;
+	src_pitch = vinfo.xres_virtual * ((vinfo.bits_per_pixel + 7) / 8);
+	src_size = vinfo.yres_virtual * src_pitch;
 
 	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
 	if (!src) {
@@ -1817,8 +1817,8 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 
 	/* Copy from virtual or visual fb?
 	   Is dst height vinfo.yres? or pScrn->displayHeight? */
-	drmmode_copy_from_to(src, 0, 0, src_pitch, pScrn->virtualY,
-			     dst, 0, 0, dst_pitch, vinfo.yres);
+	drmmode_copy_from_to(src, 0, 0, src_pitch, vinfo.yres_virtual,
+			     dst, 0, 0, dst_pitch, pScrn->virtualY);
 
 	omap_bo_cpu_fini(pOMAP->scanout, 0);
 
