@@ -393,26 +393,49 @@ out:
 	return ret;
 }
 
+/*
+ * Copy region of @src starting at (@src_x, @src_y) to @dst at (@dst_x, dst_y).
+ * This function does no conversions, so it assumes same src and dst bpp.
+ *  @src         source buffer
+ *  @src_x       x coordinate from which to start copying
+ *  @src_y       y coordinate from which to start copying
+ *  @src_width   max number of pixels per src row to copy
+ *  @src_height  max number of src rows to copy
+ *  @src_pitch   total length of each src row, in bytes
+ *  @src_cpp     bytes (ie, chars) per pixel of source
+ *  @dst         destination buffer
+ *  @dst_x       x coordinate to which to start copying
+ *  @dst_y       y coordinate to which to start copying
+ *  @dst_width   max number of pixels per dst row to copy
+ *  @dst_height  max number of dst rows to copy
+ *  @dst_pitch   total length of each dst row, in bytes
+ *  @dst_cpp     bytes (ie, chars) per pixel of dst, must be same as src_cpp
+ */
 static void
-drmmode_copy_from_to(const uint8_t *src, int src_x, int src_y, int src_pitch,
-		     int src_height, uint8_t *dst, int dst_x, int dst_y,
-		     int dst_pitch, int dst_height)
+drmmode_copy_from_to(const uint8_t *src, int src_x, int src_y, int src_width,
+		     int src_height, int src_pitch, int src_cpp,
+		     uint8_t *dst, int dst_x, int dst_y, int dst_width,
+		     int dst_height, int dst_pitch, int dst_cpp)
 {
 	int y;
 	int src_x_start = max(dst_x - src_x, 0);
 	int dst_x_start = max(src_x - dst_x, 0);
 	int src_y_start = max(dst_y - src_y, 0);
 	int dst_y_start = max(src_y - dst_y, 0);
-	int pitch = min(src_pitch - src_x_start, dst_pitch - dst_x_start);
+	int width = min(src_width - src_x_start, dst_width - dst_x_start);
 	int height = min(src_height - src_y_start, dst_height - dst_y_start);
 
-	if (pitch <= 0 || height <= 0)
+
+	assert(src_cpp == dst_cpp);
+
+	if (width <= 0 || height <= 0)
 		return;
 
-	src += src_y_start * src_pitch + src_x_start;
-	dst += dst_y_start * dst_pitch + dst_x_start;
+	src += src_y_start * src_pitch + src_x_start * src_cpp;
+	dst += dst_y_start * dst_pitch + dst_x_start * src_cpp;
+
 	for (y = 0; y < height; y++, src += src_pitch, dst += dst_pitch)
-		memcpy(dst, src, pitch);
+		memcpy(dst, src, width * dst_cpp);
 }
 
 /*
@@ -447,10 +470,12 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		return -EIO;
 	}
 
-	drmmode_copy_from_to(src, src_x * omap_bo_Bpp(src_bo), src_y,
-			     omap_bo_pitch(src_bo), omap_bo_height(src_bo),
-			     dst, dst_x * omap_bo_Bpp(dst_bo), dst_y,
-			     omap_bo_pitch(dst_bo), omap_bo_height(dst_bo));
+	drmmode_copy_from_to(src, src_x, src_y,
+			     omap_bo_width(src_bo), omap_bo_height(src_bo),
+			     omap_bo_pitch(src_bo), omap_bo_Bpp(src_bo),
+			     dst, dst_x, dst_y,
+			     omap_bo_width(dst_bo), omap_bo_height(dst_bo),
+			     omap_bo_pitch(dst_bo), omap_bo_Bpp(dst_bo));
 
 	omap_bo_cpu_fini(src_bo, 0);
 	omap_bo_cpu_fini(dst_bo, 0);
@@ -1772,7 +1797,9 @@ drmmode_screen_fini(ScrnInfoPtr pScrn)
 void drmmode_copy_fb(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	uint32_t dst_pitch = pScrn->displayWidth * ((pScrn->bitsPerPixel + 7) / 8);
+	int dst_cpp = (pScrn->bitsPerPixel + 7) / 8;
+	uint32_t dst_pitch = pScrn->displayWidth * dst_cpp;
+	int src_cpp;
 	uint32_t src_pitch;
 	unsigned int src_size;
 	unsigned char *dst, *src;
@@ -1805,7 +1832,8 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	src_pitch = vinfo.xres_virtual * ((vinfo.bits_per_pixel + 7) / 8);
+	src_cpp = (vinfo.bits_per_pixel + 7) / 8;
+	src_pitch = vinfo.xres_virtual * src_cpp;
 	src_size = vinfo.yres_virtual * src_pitch;
 
 	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
@@ -1815,10 +1843,10 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	/* Copy from virtual or visual fb?
-	   Is dst height vinfo.yres? or pScrn->displayHeight? */
-	drmmode_copy_from_to(src, 0, 0, src_pitch, vinfo.yres_virtual,
-			     dst, 0, 0, dst_pitch, pScrn->virtualY);
+	drmmode_copy_from_to(src, 0, 0, vinfo.xres_virtual, vinfo.yres_virtual,
+			src_pitch, src_cpp,
+			dst, 0, 0, pScrn->virtualX, pScrn->virtualY,
+			dst_pitch, dst_cpp);
 
 	omap_bo_cpu_fini(pOMAP->scanout, 0);
 
