@@ -148,6 +148,7 @@ struct drm_exynos_plane_set_zpos {
 	 __u32 plane_id;
 	 __s32 zpos;
 };
+
 #define DRM_EXYNOS_PLANE_SET_ZPOS       0x06
 #define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
@@ -482,6 +483,9 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		return -EIO;
 	}
 
+	omap_bo_cpu_prep(src_bo, OMAP_GEM_READ);
+	omap_bo_cpu_prep(dst_bo, OMAP_GEM_WRITE);
+
 	drmmode_copy_from_to(src, src_x, src_y,
 			     omap_bo_width(src_bo), omap_bo_height(src_bo),
 			     omap_bo_pitch(src_bo), omap_bo_Bpp(src_bo),
@@ -489,8 +493,8 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 			     omap_bo_width(dst_bo), omap_bo_height(dst_bo),
 			     omap_bo_pitch(dst_bo), omap_bo_Bpp(dst_bo));
 
-	omap_bo_cpu_fini(src_bo, 0);
 	omap_bo_cpu_fini(dst_bo, 0);
+	omap_bo_cpu_fini(src_bo, 0);
 
 	return 0;
 }
@@ -862,6 +866,7 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 		drmmode_hide_cursor(crtc);
 
 	dst = omap_bo_map(cursor->bo);
+	omap_bo_cpu_prep(cursor->bo, OMAP_GEM_WRITE);
 	for (row = 0; row < CURSORH; row += 1) {
 		// we're operating with ARGB data (32bpp)
 		src_row = (const char*)image + row * 4 * (CURSORW - 2 * CURSORPAD);
@@ -872,6 +877,7 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 		memcpy(dst_row + (4 * CURSORPAD), src_row, 4 * (CURSORW - 2 * CURSORPAD));
 		memset(dst_row + 4 * (CURSORW - CURSORPAD), 0, (4 * CURSORPAD));
 	}
+	omap_bo_cpu_fini(cursor->bo, 0);
 
 	if (visible)
 		drmmode_show_cursor(crtc);
@@ -1811,6 +1817,8 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 				"Couldn't mmap /dev/fb0\n");
 		goto close_fd;
 	}
+
+	omap_bo_cpu_prep(pOMAP->scanout, OMAP_GEM_WRITE);
 
 	drmmode_copy_from_to(src, 0, 0, vinfo.xres_virtual, vinfo.yres_virtual,
 			src_pitch, src_cpp,

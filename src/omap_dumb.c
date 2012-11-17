@@ -51,6 +51,28 @@ struct omap_bo {
 	int refcnt;
 };
 
+enum {
+	DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED = 0x0,
+	DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE = 0x1,
+};
+
+struct drm_exynos_gem_cpu_acquire {
+	unsigned int handle;
+	unsigned int flags;
+};
+
+struct drm_exynos_gem_cpu_release {
+	unsigned int handle;
+};
+
+/* TODO: use exynos_drm.h kernel headers (http://crosbug.com/37294) */
+#define DRM_EXYNOS_GEM_CPU_ACQUIRE	0x08
+#define DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_GEM_CPU_ACQUIRE, struct drm_exynos_gem_cpu_acquire)
+#define DRM_EXYNOS_GEM_CPU_RELEASE	0x09
+#define DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE	DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_GEM_CPU_RELEASE, struct drm_exynos_gem_cpu_release)
+
 /* device related functions:
  */
 
@@ -235,12 +257,29 @@ void *omap_bo_map(struct omap_bo *bo)
 
 int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 {
-	return 0;
+	struct drm_exynos_gem_cpu_acquire acquire;
+	int ret;
+	acquire.handle = bo->handle;
+	if (op == OMAP_GEM_WRITE) {
+		acquire.flags = DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE;
+	} else {
+		acquire.flags = DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED;
+	}
+	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE, &acquire);
+	if (ret)
+		xf86DrvMsg(-1, X_ERROR, "DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE failed: %d", ret);
+	return ret;
 }
 
 int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 {
-	return 0;
+	struct drm_exynos_gem_cpu_release release;
+	int ret;
+	release.handle = bo->handle;
+	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE, &release);
+	if (ret)
+		xf86DrvMsg(-1, X_ERROR, "DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE failed: %d", ret);
+	return ret;
 }
 
 int omap_get_param(struct omap_device *dev, uint64_t param, uint64_t *value)
