@@ -786,37 +786,21 @@ done:
 #define CURSORPAD 16
 
 static void
-drmmode_hide_cursor(xf86CrtcPtr crtc)
+drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-
-	if (!cursor)
-		return;
-
-	drmmode_crtc->cursor_visible = FALSE;
-
-	/* set plane's fb_id to 0 to disable it */
-	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
-			drmmode_crtc->mode_crtc->crtc_id, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0);
-}
-
-static void
-drmmode_show_cursor(xf86CrtcPtr crtc)
-{
-	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	drmmode_cursor_ptr cursor = drmmode->cursor;
-
-	struct drm_exynos_plane_set_zpos data;
 	int crtc_x, crtc_y, src_x, src_y, w, h;
 
 	if (!cursor)
 		return;
 
-	drmmode_crtc->cursor_visible = TRUE;
+	cursor->x = x;
+	cursor->y = y;
+
+	if (!drmmode_crtc->cursor_visible)
+		return;
 
 	w = CURSORW;
 	h = CURSORH;
@@ -845,10 +829,6 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 		h = crtc->mode.VDisplay - crtc_y;
 	}
 
-	data.plane_id = cursor->ovr->plane_id;
-	data.zpos = 1;
-	ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
-
 	/* note src coords (last 4 args) are in Q16 format */
 	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
 			drmmode_crtc->mode_crtc->crtc_id, cursor->fb_id, 0,
@@ -856,7 +836,7 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 }
 
 static void
-drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
+drmmode_hide_cursor(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
@@ -865,11 +845,32 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	if (!cursor)
 		return;
 
-	cursor->x = x;
-	cursor->y = y;
+	drmmode_crtc->cursor_visible = FALSE;
 
-	if (drmmode_crtc->cursor_visible)
-		drmmode_show_cursor(crtc);
+	/* set plane's fb_id to 0 to disable it */
+	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
+			drmmode_crtc->mode_crtc->crtc_id, 0, 0,
+			0, 0, 0, 0, 0, 0, 0, 0);
+}
+
+static void
+drmmode_show_cursor(xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	drmmode_cursor_ptr cursor = drmmode->cursor;
+	struct drm_exynos_plane_set_zpos data;
+
+	if (!cursor)
+		return;
+
+	drmmode_crtc->cursor_visible = TRUE;
+
+	data.plane_id = cursor->ovr->plane_id;
+	data.zpos = 1;
+	ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
+
+	drmmode_set_cursor_position(crtc, cursor->x, cursor->y);
 }
 
 static void
@@ -968,7 +969,8 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 
 	// see definition of CURSORPAD
-	if (xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h, HARDWARE_CURSOR_ARGB)) {
+	if (xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h,
+		HARDWARE_CURSOR_ARGB | HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
 		INFO_MSG("HW cursor initialized");
 		drmmode->cursor = cursor;
 		return TRUE;
