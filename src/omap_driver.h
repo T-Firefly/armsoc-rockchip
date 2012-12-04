@@ -116,7 +116,11 @@ extern _X_EXPORT Bool omapDebug;
 typedef struct _OMAPScanout
 {
 	struct omap_bo *bo;
-	int width, height, x, y;
+	int width;
+	int height;
+	int x;
+	int y;
+	Bool valid;
 } OMAPScanout, *OMAPScanoutPtr;
 
 enum OMAPFlipMode

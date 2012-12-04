@@ -326,7 +326,7 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DrawablePtr pDraw = NULL;
-	int status;
+	int status, i;
 	OMAPPixmapPrivPtr dst_priv;
 
 	if (--cmd->swapCount > 0)
@@ -345,10 +345,26 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 			DRI2SwapComplete(cmd->client, pDraw, 0, 0, 0, cmd->type,
 					cmd->func, cmd->data);
 
-			if (cmd->type != DRI2_BLIT_COMPLETE && (cmd->flags & OMAP_SWAP_FAKE_FLIP) == 0) {
+			if (cmd->type == DRI2_BLIT_COMPLETE) {
+				/* For blits, invalidate the per-crtc scanouts.
+				 */
+				for (i = 0; i < MAX_SCANOUTS; i++) {
+					pOMAP->scanouts[i].valid = FALSE;
+				}
+			} else {
 				assert(cmd->type == DRI2_FLIP_COMPLETE);
 				dst_priv = exaGetPixmapDriverPrivate(cmd->pDstPixmap);
-				drmmode_scanout_set(pOMAP->scanouts, cmd->x, cmd->y, dst_priv->bo);
+				/* For flips, validate the per-crtc scanout.
+				 */
+				for (i = 0; i < MAX_SCANOUTS; i++) {
+					if (pOMAP->scanouts[i].bo == dst_priv->bo) {
+						pOMAP->scanouts[i].valid = TRUE;
+						break;
+					}
+				}
+				if ((cmd->flags & OMAP_SWAP_FAKE_FLIP) == 0) {
+					drmmode_scanout_set(pOMAP->scanouts, cmd->x, cmd->y, dst_priv->bo);
+				}
 			}
 		}
 	}

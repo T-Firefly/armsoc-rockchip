@@ -494,20 +494,20 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
 		return TRUE;
 
-	/* Only copy if we had valid previous contents */
-	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
-		for (i = 0; i < MAX_SCANOUTS; i++) {
-			scanout = &pOMAP->scanouts[i];
+	/* Only copy if source is valid. */
+	for (i = 0; i < MAX_SCANOUTS; i++) {
+		scanout = &pOMAP->scanouts[i];
 
-			if (!scanout->bo)
-				continue;
+		if (!scanout->bo)
+			continue;
+		if (!scanout->valid)
+			continue;
 
-			ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
-					      scanout->y, pOMAP->scanout, 0, 0);
-			if (ret) {
-				ERROR_MSG("Copy crtc to scanout failed");
-				return FALSE;
-			}
+		ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
+					  scanout->y, pOMAP->scanout, 0, 0);
+		if (ret) {
+			ERROR_MSG("Copy crtc to scanout failed");
+			return FALSE;
 		}
 	}
 	for (i = 0; i < xf86_config->num_crtc; i++) {
@@ -538,22 +538,23 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 	if (pOMAP->flip_mode == OMAP_FLIP_ENABLED)
 		return TRUE;
 
-	/* Only copy if we had valid previous contents */
-	if (pOMAP->flip_mode != OMAP_FLIP_INVALID) {
-		for (i = 0; i < MAX_SCANOUTS; i++) {
-			scanout = &pOMAP->scanouts[i];
+	/* Only copy if destination is invalid. */
+	for (i = 0; i < MAX_SCANOUTS; i++) {
+		scanout = &pOMAP->scanouts[i];
 
-			if (!scanout->bo)
-				continue;
+		if (!scanout->bo)
+			continue;
+		if (scanout->valid)
+			continue;
 
-			ret = drmmode_copy_bo(pScrn, pOMAP->scanout, 0, 0,
-					      scanout->bo, scanout->x,
-					      scanout->y);
-			if (ret) {
-				ERROR_MSG("Copy scanout to crtc failed");
-				return FALSE;
-			}
+		ret = drmmode_copy_bo(pScrn, pOMAP->scanout, 0, 0,
+					  scanout->bo, scanout->x,
+					  scanout->y);
+		if (ret) {
+			ERROR_MSG("Copy scanout to crtc failed");
+			return FALSE;
 		}
+		scanout->valid = TRUE;
 	}
 
 	for (i = 0; i < xf86_config->num_crtc; i++) {
@@ -576,48 +577,6 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 	return TRUE;
 }
 
-static Bool drmmode_need_update_scanouts(ScrnInfoPtr pScrn)
-{
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-	xf86CrtcPtr crtc;
-	DisplayModeRec mode;
-	int found = 0;
-	int count = 0;
-	int num_crtc = 0;
-	int i, j;
-
-	for (i = 0; i < xf86_config->num_crtc; i++) {
-		crtc = xf86_config->crtc[i];
-
-		if (!crtc->enabled)
-			continue;
-
-		mode = crtc->mode;
-
-		num_crtc++;
-		for (j = 0; j < MAX_SCANOUTS; j++) {
-
-			OMAPScanoutPtr scanout = &pOMAP->scanouts[j];
-			struct omap_bo *bo = scanout->bo;
-			if (!bo)
-				continue;
-
-			if (mode.HDisplay == omap_bo_width(bo) &&
-			    mode.VDisplay == omap_bo_height(bo) &&
-			    crtc->x == scanout->x &&
-			    crtc->y == scanout->y &&
-			    pScrn->depth == omap_bo_depth(bo) &&
-			    (found & 1 << j) == 0) {
-				found |= 1 << j;
-				count++;
-			}
-		}
-	}
-
-	return (count != num_crtc);
-}
-
 static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
@@ -626,57 +585,55 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86CrtcPtr crtc;
 	struct omap_bo *bo;
+	Bool valid;
 
-	/* Reset the flip mode so we ensure the CRTC's are properly setup */
-	pOMAP->flip_mode = OMAP_FLIP_INVALID;
-
-	/* Check if we already have the right scanouts available */
-	if (!drmmode_need_update_scanouts(pScrn))
-		return TRUE;
-
-	/* Delete all scanouts, we'll reallocate below */
-	for (i = 0; i < MAX_SCANOUTS; i++) {
-		scanout = &pOMAP->scanouts[i];
-
-		omap_bo_unreference(scanout->bo);
-		scanout->bo = NULL;
-		scanout->width = 0;
-		scanout->height = 0;
-		scanout->x = 0;
-		scanout->y = 0;
-	}
+	OMAPScanout old_scanouts[MAX_SCANOUTS];
+	memcpy(old_scanouts, pOMAP->scanouts, sizeof(old_scanouts));
+	memset(pOMAP->scanouts, 0, sizeof(pOMAP->scanouts));
 
 	for (i = 0; i < xf86_config->num_crtc; i++) {
 		crtc = xf86_config->crtc[i];
-
 		if (!crtc->enabled || !crtc->mode.HDisplay ||
-		    !crtc->mode.VDisplay)
+				!crtc->mode.VDisplay)
 			continue;
 
-		scanout = drmmode_scanout_from_crtc(pOMAP->scanouts, crtc);
-		if (scanout)
-			continue;
-
-		/* Allocate a new scanout */
-		bo = drmmode_new_fb(pOMAP, crtc->mode.HDisplay,
-			crtc->mode.VDisplay, pScrn->depth,
-			pScrn->bitsPerPixel);
-		if (!bo) {
-			ERROR_MSG("Scanout buffer allocation failed\n");
-			return FALSE;
+		scanout = drmmode_scanout_from_crtc(old_scanouts, crtc);
+		if (scanout) {
+			/* Use existing BO */
+			bo = scanout->bo;
+			valid = scanout->valid;
+			memset(scanout, 0, sizeof(*scanout));
+		} else {
+			/* Allocate a new BO */
+			bo = drmmode_new_fb(pOMAP, crtc->mode.HDisplay,
+				crtc->mode.VDisplay, pScrn->depth,
+				pScrn->bitsPerPixel);
+			if (!bo) {
+				ERROR_MSG("Scanout buffer allocation failed\n");
+				return FALSE;
+			}
+			valid = FALSE;
 		}
-
 		scanout = drmmode_scanout_add(pOMAP->scanouts, crtc, bo);
 		if (!scanout) {
 			ERROR_MSG("Add scanout failed\n");
+			omap_bo_unreference(bo);
 			return FALSE;
 		}
+		scanout->valid = valid;
+
 		/*
-		 * drmmode_scanout_add() adds a reference but we already
-		 * have a reference from the fresh allocation.
+		 * drmmode_scanout_add() adds a reference, but we either:
+		 * * already have a reference, from a recycled BO
+		 * * was given a reference when a new BO was allocated
 		 */
 		omap_bo_unreference(bo);
 	}
+
+	/* Drop the remaining unused BOs. */
+	for (i = 0; i < MAX_SCANOUTS; i++)
+		if (old_scanouts[i].bo != NULL)
+			omap_bo_unreference(old_scanouts[i].bo);
 
 	return TRUE;
 }

@@ -192,25 +192,6 @@ static inline enum omap_gem_op idx2op(int index)
 	}
 }
 
-static void* OMAPMapBuffer(OMAPPtr pOMAP, struct omap_bo* bo)
-{
-	int i;
-
-	if (!bo)
-		return NULL;
-
-	/* If this is one of our scanouts, give back the main scanout.
-	 * We don't want 2D acceleration to ever touch the per-crtc
-	 * scanouts.
-	 */
-	for (i = 0; i < MAX_SCANOUTS; i++)
-		if (pOMAP->scanouts[i].bo &&
-			pOMAP->scanouts[i].bo == bo)
-			return omap_bo_map(pOMAP->scanout);
-
-	return omap_bo_map(bo);
-}
-
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
  *
@@ -250,19 +231,40 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
+	const enum omap_gem_op op = idx2op(index);
+	int i;
 
-	pPixmap->devPrivate.ptr = OMAPMapBuffer(pOMAP, priv->bo);
+	if (!priv->bo)
+		return FALSE;
+
+	/* If this is one of our scanouts, give back the main scanout.
+	 * We don't want 2D acceleration to ever touch the per-crtc
+	 * scanouts.
+	 */
+	for (i = 0; i < MAX_SCANOUTS; i++) {
+		if (pOMAP->scanouts[i].bo == priv->bo) {
+			/* If we're in per-crtc flip mode (ie: not using the scanout
+			 * buffer), make sure we enter blit mode before access. This
+			 * function copies the crtc scanouts back to the One True scanout
+			 * buffer.
+			 */
+			if (!drmmode_set_blit_mode(pScrn))
+				return FALSE;
+			/* If we're going to write to the One True scanout buffer, the
+			 * per-crtc scanout buffer should be invalidated.
+			 */
+			if (op & OMAP_GEM_WRITE)
+				pOMAP->scanouts[i].valid = FALSE;
+			pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
+		}
+	}
+	if (i == MAX_SCANOUTS) {
+		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+	}
 
 	if (!pPixmap->devPrivate.ptr) {
 		return FALSE;
 	}
-
-	/* If we're in per-crtc flip mode (ie: not using the scanout buffer),
-	 * make sure we enter blit mode before access. This function copies
-	 * the crtc scanouts back to the One True scanout buffer.
-	 */
-	if (!drmmode_set_blit_mode(pScrn))
-		return FALSE;
 
 	/* wait for blits complete.. note we could be a bit more clever here
 	 * for non-DRI2 buffers and use separate OMAP{Prepare,Finish}GPUAccess()
@@ -271,8 +273,7 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	 * intervening GPU operation (or if we go to a stronger op mask, ie.
 	 * first CPU access is READ and second is WRITE).
 	 */
-
-	if (omap_bo_cpu_prep(priv->bo, idx2op(index))) {
+	if (omap_bo_cpu_prep(priv->bo, op)) {
 		return FALSE;
 	}
 
