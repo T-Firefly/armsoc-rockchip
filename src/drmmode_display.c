@@ -225,7 +225,7 @@ int drmmode_crtc_id(xf86CrtcPtr crtc)
 	return drmmode_crtc->mode_crtc->crtc_id;
 }
 
-int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw)
+int drmmode_crtc_index_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw)
 {
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86CrtcPtr crtc;
@@ -236,14 +236,26 @@ int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw)
 		crtc = xf86_config->crtc[i];
 		if (!crtc->enabled)
 			continue;
-
 		mode = &crtc->mode;
 		if (crtc->x == pDraw->x && crtc->y == pDraw->y &&
 		    mode->HDisplay == pDraw->width &&
 		    mode->VDisplay == pDraw->height)
-			return drmmode_crtc_id(crtc);
+			return i;
 	}
-	return 0;
+	return -1;
+}
+
+int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw)
+{
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+	xf86CrtcPtr crtc;
+	int index;
+
+	index = drmmode_crtc_index_from_drawable(pScrn, pDraw);
+	if (index == -1)
+		return 0;
+	crtc = xf86_config->crtc[index];
+	return drmmode_crtc_id(crtc);
 }
 
 static drmmode_ptr

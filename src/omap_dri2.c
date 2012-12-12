@@ -271,17 +271,24 @@ OMAPDRI2GetMSC(DrawablePtr pDraw, CARD64 *ust, CARD64 *msc)
 	ScreenPtr pScreen = pDraw->pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	int crtc_index = drmmode_crtc_index_from_drawable(pScrn, pDraw);
 	drmVBlank vbl = { .request = {
-		.type = DRM_VBLANK_RELATIVE,
+		.type = DRM_VBLANK_RELATIVE |
+			(crtc_index << DRM_VBLANK_HIGH_CRTC_SHIFT),
 		.sequence = 0,
 	} };
 	int ret;
 
+        if (crtc_index == -1) {
+		ERROR_MSG("No crtc associated with given drawable");
+		return FALSE;
+        }
 	ret = drmWaitVBlank(pOMAP->drmFD, &vbl);
 	if (ret) {
 		static int limit = 5;
 		if (limit) {
-			ERROR_MSG("get vblank counter failed: %s", strerror(errno));
+			ERROR_MSG("get vblank counter failed: %s",
+				  strerror(errno));
 			limit--;
 		}
 		return FALSE;
