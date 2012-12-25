@@ -1590,9 +1590,6 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 
 	DEBUG_MSG("Resize!  %dx%d", width, height);
 
-	pScrn->virtualX = width;
-	pScrn->virtualY = height;
-
 	if (  (width != omap_bo_width(pOMAP->scanout))
 	      || (height != omap_bo_height(pOMAP->scanout))
 	      || (pScrn->bitsPerPixel != omap_bo_bpp(pOMAP->scanout)) ) {
@@ -1609,16 +1606,15 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 			return FALSE;
 		}
 
-		pitch = omap_bo_pitch(new_scanout);
-
 		pOMAP->has_resized = TRUE;
 		omap_bo_unreference(pOMAP->scanout);
 		pOMAP->scanout = new_scanout;
-
-		pScrn->displayWidth = pitch / ((pScrn->bitsPerPixel + 7) / 8);
-	}else{
-		pitch = omap_bo_pitch(pOMAP->scanout);
 	}
+
+	pScrn->virtualX = width;
+	pScrn->virtualY = height;
+	pitch = omap_bo_pitch(pOMAP->scanout);
+	pScrn->displayWidth = pitch / ((pScrn->bitsPerPixel + 7) / 8);
 
 	if (pScreen && pScreen->ModifyPixmapHeader) {
 		PixmapPtr rootPixmap = pScreen->GetScreenPixmap(pScreen);
