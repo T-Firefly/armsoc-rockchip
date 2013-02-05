@@ -384,7 +384,7 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 		output_count++;
 	}
 	if (!output_count) {
-		ERROR_MSG("No crtc outputs found\n");
+		ERROR_MSG("No crtc outputs found");
 		ret = -ENODEV;
 		goto out;
 	}
@@ -397,7 +397,7 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 			omap_bo_get_fb(bo), x, y, output_ids, output_count,
 			&kmode);
 	if (ret) {
-		ERROR_MSG("failed to set mode: %s\n", strerror(-ret));
+		ERROR_MSG("failed to set mode: %s", strerror(-ret));
 		goto out;
 	}
 
@@ -466,7 +466,7 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 	const void *src;
 
 	if (!src_bo || !dst_bo) {
-		ERROR_MSG("copy_bo received invalid arguments\n");
+		ERROR_MSG("copy_bo received invalid arguments");
 		return -EINVAL;
 	}
 
@@ -474,12 +474,12 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 
 	src = omap_bo_map(src_bo);
 	if (!src) {
-		ERROR_MSG("Couldn't map src bo\n");
+		ERROR_MSG("Couldn't map src bo");
 		return -EIO;
 	}
 	dst = omap_bo_map(dst_bo);
 	if (!dst) {
-		ERROR_MSG("Couldn't map dst bo\n");
+		ERROR_MSG("Couldn't map dst bo");
 		return -EIO;
 	}
 
@@ -535,7 +535,7 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 		ret = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x,
 				crtc->y);
 		if (ret) {
-			ERROR_MSG("Set crtc to scanout failed\n");
+			ERROR_MSG("Set crtc to scanout failed");
 			return FALSE;
 		}
 	}
@@ -585,7 +585,7 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 
 		ret = drmmode_set_crtc(pScrn, crtc, scanout->bo, 0, 0);
 		if (ret) {
-			ERROR_MSG("Set crtc to crtc scanout failed\n");
+			ERROR_MSG("Set crtc to crtc scanout failed");
 			return FALSE;
 		}
 	}
@@ -625,14 +625,14 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 				crtc->mode.VDisplay, pScrn->depth,
 				pScrn->bitsPerPixel);
 			if (!bo) {
-				ERROR_MSG("Scanout buffer allocation failed\n");
+				ERROR_MSG("Scanout buffer allocation failed");
 				return FALSE;
 			}
 			valid = FALSE;
 		}
 		scanout = drmmode_scanout_add(pOMAP->scanouts, crtc, bo);
 		if (!scanout) {
-			ERROR_MSG("Add scanout failed\n");
+			ERROR_MSG("Add scanout failed");
 			omap_bo_unreference(bo);
 			return FALSE;
 		}
@@ -704,7 +704,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 	ret = drmmode_update_scanouts(pScrn);
 	if (!ret) {
-		ERROR_MSG("Update scanouts failed, ret=%d\n", ret);
+		ERROR_MSG("Update scanouts failed, ret=%d", ret);
 		goto done;
 	}
 
@@ -925,7 +925,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 
 	ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[0]);
 	if (!ovr) {
-		ERROR_MSG("drmModeGetPlane failed: %s\n", strerror(errno));
+		ERROR_MSG("drmModeGetPlane failed: %s", strerror(errno));
 		return FALSE;
 	}
 
@@ -1485,7 +1485,7 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 					     height, pScrn->depth,
 					     pScrn->bitsPerPixel);
 		if (!new_scanout) {
-			ERROR_MSG("Error reallocating scanout buffer\n");
+			ERROR_MSG("Error reallocating scanout buffer");
 			return FALSE;
 		}
 
@@ -1624,7 +1624,7 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv)
 				drmmode_crtc->mode_crtc->crtc_id, fb_id, flags,
 				priv);
 		if (ret) {
-			ERROR_MSG("flip queue failed: %s\n", strerror(errno));
+			ERROR_MSG("flip queue failed: %s", strerror(errno));
 			return ret > 0 ? -ret : ret;
 		}
 		num_flipped++;

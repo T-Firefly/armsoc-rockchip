@@ -979,7 +979,7 @@ OMAPEnterVT(int scrnIndex, int flags)
 
 	ret = drmSetMaster(pOMAP->drmFD);
 	if (ret) {
-		ERROR_MSG("Cannot get DRM master: %s\n", strerror(errno));
+		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
 		return FALSE;
 	}
 
@@ -1020,7 +1020,7 @@ OMAPLeaveVT(int scrnIndex, int flags)
 
 	ret = drmDropMaster(pOMAP->drmFD);
 	if (ret) {
-		WARNING_MSG("drmDropMaster failed: %s\n", strerror(errno));
+		WARNING_MSG("drmDropMaster failed: %s", strerror(errno));
 	}
 
 	TRACE_EXIT();

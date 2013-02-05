@@ -442,7 +442,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		omap_bo_reference(dst_priv->bo);
 		omap_bo_unreference(old_bo);
 		if (!drmmode_set_flip_mode(pScrn)) {
-			ERROR_MSG("Could not set flip mode\n");
+			ERROR_MSG("Could not set flip mode");
 			return FALSE;
 		}
 	} else {
@@ -450,7 +450,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		omap_bo_unreference(dst_priv->bo);
 		dst_priv->bo = pOMAP->scanout;
 		if (!drmmode_set_blit_mode(pScrn)) {
-			ERROR_MSG("Could not set blit mode\n");
+			ERROR_MSG("Could not set blit mode");
 			return FALSE;
 		}
 	}
