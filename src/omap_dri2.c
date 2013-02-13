@@ -411,7 +411,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPDRISwapCmd *cmd = calloc(1, sizeof(*cmd));
 	int src_fb_id, dst_fb_id;
 	OMAPPixmapPrivPtr src_priv, dst_priv;
-	int new_canflip, ret;
+	int new_canflip, ret, num_flipped;
 
 	cmd->client = client;
 	cmd->pScreen = pScreen;
@@ -496,13 +496,13 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		cmd->type = DRI2_FLIP_COMPLETE;
 		/* TODO: handle rollback if only multiple CRTC flip is only partially successful
 		 */
-		ret = drmmode_page_flip(pDraw, src_fb_id, cmd);
+		ret = drmmode_page_flip(pDraw, src_fb_id, cmd, &num_flipped);
 
 		/* If using page flip events, we'll trigger an immediate completion in
 		 * the case that no CRTCs were enabled to be flipped.  If not using page
 		 * flip events, trigger immediate completion unconditionally.
 		 */
-		if (ret < 0) {
+		if (ret) {
 			/*
 			 * Error while flipping; bail.
 			 */
@@ -510,7 +510,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 #if !OMAP_USE_PAGE_FLIP_EVENTS
 			cmd->swapCount = 0;
 #else
-			cmd->swapCount = -(ret + 1);
+			cmd->swapCount = num_flipped;
 			if (cmd->swapCount == 0)
 #endif
 			{
@@ -518,12 +518,12 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 			}
 			return FALSE;
 		} else {
-			if (ret == 0)
+			if (num_flipped == 0)
 				cmd->flags |= OMAP_SWAP_FAKE_FLIP;
 #if !OMAP_USE_PAGE_FLIP_EVENTS
 			cmd->swapCount = 0;
 #else
-			cmd->swapCount = ret;
+			cmd->swapCount = num_flipped;
 			if (cmd->swapCount == 0)
 #endif
 			{

@@ -1593,14 +1593,15 @@ static drmEventContext event_context = {
 };
 
 int
-drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv)
+drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
+		int* num_flipped)
 {
 	ScrnInfoPtr pScrn = xf86Screens[draw->pScreen->myNum];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86CrtcPtr crtc;
 	drmmode_crtc_private_ptr drmmode_crtc;
-	int ret, i, num_flipped;
+	int ret, i;
 	unsigned int flags = 0;
 
 #if OMAP_USE_PAGE_FLIP_EVENTS
@@ -1608,7 +1609,7 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv)
 #endif
 
 	/* Flip all crtc's that match this drawable's position and size */
-	num_flipped = 0;
+	*num_flipped = 0;
 	for (i = 0; i < xf86_config->num_crtc; i++) {
 		crtc = xf86_config->crtc[i];
 		drmmode_crtc = crtc->driver_private;
@@ -1625,11 +1626,11 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv)
 				priv);
 		if (ret) {
 			ERROR_MSG("flip queue failed: %s", strerror(errno));
-			return ret > 0 ? -ret : ret;
+			return ret;
 		}
-		num_flipped++;
+		(*num_flipped)++;
 	}
-	return num_flipped;
+	return 0;
 }
 
 /*
