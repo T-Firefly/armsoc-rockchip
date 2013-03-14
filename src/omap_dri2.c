@@ -84,24 +84,102 @@ dri2draw(DrawablePtr pDraw, DRI2BufferPtr buf)
 	}
 }
 
+/*
+ * Returns true if drawable is potentially flippable.
+ *  A drawable may be flippable if it:
+ *    (a) is a WINDOW
+ *    (b) has a buffer object, and the buffer object size exactly matches
+ *        the drawable size.
+ *    (c) has the same dimensions as one of the scanouts
+ *
+ * Note: Even if a drawable may be flippable, it will not actually be flipped
+ * if it is clipped.
+ */
+static Bool
+mayflip(DrawablePtr pDraw, struct omap_bo *back_bo)
+{
+	ScreenPtr pScreen = pDraw->pScreen;
+	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	Bool ret;
+
+	if (pDraw->type != DRAWABLE_WINDOW) {
+		ret = FALSE;
+		goto out;
+	}
+
+	if (back_bo && (omap_bo_width(back_bo) != pDraw->width ||
+	    omap_bo_height(back_bo) != pDraw->height)) {
+		ret = FALSE;
+		goto out;
+	}
+
+	if (!drmmode_scanout_from_drawable(pOMAP->scanouts, pDraw)) {
+		ret = FALSE;
+		goto out;
+	}
+
+	ret = TRUE;
+
+out:
+	DEBUG_MSG("pDraw %ux%u WINDOW? %d, back_bo %ux%u canflip: %d",
+			pDraw->width, pDraw->height,
+			(pDraw->type == DRAWABLE_WINDOW),
+			(back_bo) ? omap_bo_width(back_bo) : 0,
+			(back_bo) ? omap_bo_height(back_bo) : 0,
+			ret);
+	return ret;
+}
+
+/*
+ * Returns true if drawable can be flipped.
+ *  A drawable can be flipped if it:
+ *    (a) is a WINDOW
+ *    (b) has a buffer object, and the buffer object size exactly matches
+ *        the drawable size.
+ *    (c) has the same dimensions as one of the scanouts
+ *    (d) has exactly one clip region
+ *    (e) has exactly one clip region, and the regions dimensions match its own
+ */
 static Bool
 canflip(DrawablePtr pDraw, struct omap_bo *back_bo)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	Bool ret;
+	WindowPtr pWindow = NULL;
+	BoxPtr pBox = NULL;
+	int num_rects = -1;
+	int width = 0;
+	int height = 0;
 
-	if (pDraw->type != DRAWABLE_WINDOW)
-		return FALSE;
+	if (!mayflip(pDraw, back_bo)) {
+		ret = FALSE;
+		goto out;
+	}
 
-	if (back_bo && (omap_bo_width(back_bo) != pDraw->width ||
-	    omap_bo_height(back_bo) != pDraw->height))
-		return FALSE;
+	pWindow = (WindowPtr)pDraw;
 
-	if (drmmode_scanout_from_drawable(pOMAP->scanouts, pDraw))
-		return TRUE;
+	num_rects = RegionNumRects(&pWindow->clipList);
+	if (num_rects != 1) {
+		ret = FALSE;
+		goto out;
+	}
 
-	return FALSE;
+	pBox = RegionRects(&pWindow->clipList);
+	width = pBox->x2 - pBox->x1;
+	height = pBox->y2 - pBox->y1;
+	if (width != pDraw->width || height != pDraw->height) {
+		ret = FALSE;
+		goto out;
+	}
+
+	ret = TRUE;
+
+out:
+	DEBUG_MSG("pDraw %ux%u clipList numRects: %d rect[0]: %dx%d noclip: %d",
+			pDraw->width, pDraw->height, num_rects, width, height, ret);
+	return ret;
 }
 
 static PixmapPtr
@@ -185,7 +263,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	 * A: attempt to create a drm_framebuffer, and if that fails then the
 	 * hw must not support.. then fall back to blitting
 	 */
-	if (canflip(pDraw, NULL) && attachment != DRI2BufferFrontLeft) {
+	if (mayflip(pDraw, NULL) && attachment != DRI2BufferFrontLeft) {
 		int ret = omap_bo_add_fb(bo);
 		if (ret) {
 			/* to-bad, so-sad, we can't flip */
