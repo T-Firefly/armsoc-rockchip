@@ -256,6 +256,7 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 			if (op & OMAP_GEM_WRITE)
 				pOMAP->scanouts[i].valid = FALSE;
 			pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
+			break;
 		}
 	}
 	if (i == MAX_SCANOUTS) {
