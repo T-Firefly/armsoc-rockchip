@@ -1011,12 +1011,12 @@ OMAPLeaveVT(int scrnIndex, int flags)
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int i, ret;
 
+	TRACE_ENTER();
+
 	for (i = 1; i < currentMaxClients; i++) {
 		if (clients[i])
 			IgnoreClient(clients[i]);
 	}
-
-	TRACE_ENTER();
 
 	ret = drmDropMaster(pOMAP->drmFD);
 	if (ret) {
