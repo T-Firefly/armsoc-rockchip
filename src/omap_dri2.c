@@ -357,10 +357,9 @@ OMAPDRI2GetMSC(DrawablePtr pDraw, CARD64 *ust, CARD64 *msc)
 	} };
 	int ret;
 
-        if (crtc_index == -1) {
-		ERROR_MSG("No crtc associated with given drawable");
+	if (crtc_index == -1)
 		return FALSE;
-        }
+
 	ret = drmWaitVBlank(pOMAP->drmFD, &vbl);
 	if (ret) {
 		static int limit = 5;
