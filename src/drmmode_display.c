@@ -818,44 +818,21 @@ drmmode_hide_cursor(xf86CrtcPtr crtc)
 			0, 0, 0, 0, 0, 0, 0, 0);
 }
 
-struct drm_exynos_plane_set_zpos {
-        __u32 plane_id;
-        __s32 zpos;
-};
-#define DRM_EXYNOS_PLANE_SET_ZPOS       0x06
-#define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
-		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
-
 static void
 drmmode_show_cursor(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-	uint32_t zpos = 1;
 
 	if (!cursor)
 		return;
 
 	drmmode_crtc->cursor_visible = TRUE;
 
-	if (cursor->zpos_prop_id) {
-		drmModeObjectSetProperty(drmmode->fd, cursor->ovr->plane_id,
-					 DRM_MODE_OBJECT_PLANE,
-					 cursor->zpos_prop_id, zpos);
-	} else {
-		/*
-		 * Fallback for 3.4 kernel: custom exynos IOCTL.
-		 * TODO(msb): remove this once we migrate to 3.8 kernel.
-		 */
-
-		struct drm_exynos_plane_set_zpos data =
-			{ .plane_id = cursor->ovr->plane_id,
-			  .zpos = zpos
-			};
-
-		ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
-	}
+	drmModeObjectSetProperty(drmmode->fd, cursor->ovr->plane_id,
+				 DRM_MODE_OBJECT_PLANE,
+				 cursor->zpos_prop_id, 1);
 
 	drmmode_set_cursor_position(crtc, cursor->x, cursor->y);
 }
