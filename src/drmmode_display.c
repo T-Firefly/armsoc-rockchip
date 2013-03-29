@@ -1663,7 +1663,11 @@ drmmode_handle_uevents(int fd, void *closure)
 	 * sure it's a hotplug event (HOTPLUG=1)
 	 */
 	udev_devnum = udev_device_get_devnum(dev);
-	fstat(pOMAP->drmFD, &s);
+	if (fstat(pOMAP->drmFD, &s)) {
+		ERROR_MSG("fstat failed: %s", strerror(errno));
+		udev_device_unref(dev);
+		return;
+	}
 
 	hotplug = udev_device_get_property_value(dev, "HOTPLUG");
 
