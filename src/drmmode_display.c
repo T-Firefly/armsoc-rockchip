@@ -105,6 +105,7 @@ typedef struct {
 	drmModePlane *ovr;
 	struct omap_bo *bo;
 	uint32_t fb_id;
+	uint32_t zpos_prop_id;
 	int x, y;
 } drmmode_cursor_rec, *drmmode_cursor_ptr;
 
@@ -143,15 +144,6 @@ typedef struct {
 } drmmode_output_private_rec, *drmmode_output_private_ptr;
 
 static void drmmode_output_dpms(xf86OutputPtr output, int mode);
-
-struct drm_exynos_plane_set_zpos {
-	 __u32 plane_id;
-	 __s32 zpos;
-};
-
-#define DRM_EXYNOS_PLANE_SET_ZPOS       0x06
-#define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
-		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
 
 static OMAPScanoutPtr
 drmmode_scanout_from_size(OMAPScanoutPtr scanouts, int x, int y, int width,
@@ -826,22 +818,44 @@ drmmode_hide_cursor(xf86CrtcPtr crtc)
 			0, 0, 0, 0, 0, 0, 0, 0);
 }
 
+struct drm_exynos_plane_set_zpos {
+        __u32 plane_id;
+        __s32 zpos;
+};
+#define DRM_EXYNOS_PLANE_SET_ZPOS       0x06
+#define DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS DRM_IOWR(DRM_COMMAND_BASE + \
+		DRM_EXYNOS_PLANE_SET_ZPOS, struct drm_exynos_plane_set_zpos)
+
 static void
 drmmode_show_cursor(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-	struct drm_exynos_plane_set_zpos data;
+	uint32_t zpos = 1;
 
 	if (!cursor)
 		return;
 
 	drmmode_crtc->cursor_visible = TRUE;
 
-	data.plane_id = cursor->ovr->plane_id;
-	data.zpos = 1;
-	ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
+	if (cursor->zpos_prop_id) {
+		drmModeObjectSetProperty(drmmode->fd, cursor->ovr->plane_id,
+					 DRM_MODE_OBJECT_PLANE,
+					 cursor->zpos_prop_id, zpos);
+	} else {
+		/*
+		 * Fallback for 3.4 kernel: custom exynos IOCTL.
+		 * TODO(msb): remove this once we migrate to 3.8 kernel.
+		 */
+
+		struct drm_exynos_plane_set_zpos data =
+			{ .plane_id = cursor->ovr->plane_id,
+			  .zpos = zpos
+			};
+
+		ioctl(drmmode->fd, DRM_IOCTL_EXYNOS_PLANE_SET_ZPOS, &data);
+	}
 
 	drmmode_set_cursor_position(crtc, cursor->x, cursor->y);
 }
@@ -892,6 +906,9 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	drmmode_cursor_ptr cursor;
 	drmModePlaneRes *plane_resources;
 	drmModePlane *ovr;
+	drmModeObjectPropertiesPtr props;
+	drmModePropertyPtr prop;
+	int i;
 
 	/* technically we probably don't have any size limit.. since we
 	 * are just using an overlay... but xserver will always create
@@ -927,6 +944,19 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	if (!ovr) {
 		ERROR_MSG("drmModeGetPlane failed: %s", strerror(errno));
 		return FALSE;
+	}
+
+	props = drmModeObjectGetProperties(drmmode->fd, ovr->plane_id,
+					   DRM_MODE_OBJECT_PLANE);
+	if (props) {
+		for (i = 0; i < props->count_props; i++) {
+			prop = drmModeGetProperty(drmmode->fd, props->props[i]);
+
+			if (!strcmp(prop->name, "zpos"))
+				cursor->zpos_prop_id = prop->prop_id;
+			drmModeFreeProperty(prop);
+		}
+		drmModeFreeObjectProperties(props);
 	}
 
 	cursor->ovr = ovr;
