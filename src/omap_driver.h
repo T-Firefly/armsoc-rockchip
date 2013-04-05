@@ -70,9 +70,6 @@ enum OMAP_CHIPSET {
 #define OMAP_VERSION		1000	/* Apparently not used by X server */
 #define OMAP_NAME			"ARMSOC"	/* Name used to prefix messages */
 #define OMAP_DRIVER_NAME	"armsoc"	/* Driver name as used in config file */
-#define OMAP_MAJOR_VERSION	0
-#define OMAP_MINOR_VERSION	83
-#define OMAP_PATCHLEVEL		0
 
 #define OMAP_USE_PAGE_FLIP_EVENTS	1
 /*#define OMAP_SUPPORT_GAMMA		1 -- Not supported on exynos*/
