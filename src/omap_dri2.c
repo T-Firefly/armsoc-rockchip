@@ -33,6 +33,8 @@
 #include "omap_driver.h"
 #include "omap_exa.h"
 
+#include <time.h>
+
 #include "xf86drmMode.h"
 #include "dri2.h"
 
@@ -339,6 +341,16 @@ OMAPDRI2CopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
 	FreeScratchGC(pGC);
 }
 
+static uint64_t gettime_us(void)
+{
+	struct timespec tv;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &tv))
+		return 0;
+
+	return (uint64_t)tv.tv_sec * 1000000 + tv.tv_nsec / 1000;
+}
+
 /**
  * Get current frame count and frame count timestamp, based on drawable's
  * crtc.
@@ -357,8 +369,18 @@ OMAPDRI2GetMSC(DrawablePtr pDraw, CARD64 *ust, CARD64 *msc)
 	} };
 	int ret;
 
-	if (crtc_index == -1)
-		return FALSE;
+	/*
+	 * Drawable not full screen, use *monotonic* ust value.
+	 * Note, this is slightly different than other drivers which try harder
+	 * to match a Drawable to a crtc.
+	 */
+	if (crtc_index == -1) {
+		if (ust)
+			*ust = gettime_us();
+		if (msc)
+			*msc = 0;
+		return TRUE;
+	}
 
 	ret = drmWaitVBlank(pOMAP->drmFD, &vbl);
 	if (ret) {
