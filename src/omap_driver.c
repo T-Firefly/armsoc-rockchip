@@ -973,7 +973,7 @@ OMAPEnterVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int i, ret;
+	int ret;
 
 	TRACE_ENTER();
 
@@ -986,11 +986,6 @@ OMAPEnterVT(int scrnIndex, int flags)
 	if (!xf86SetDesiredModes(pScrn)) {
 		ERROR_MSG("xf86SetDesiredModes() failed!");
 		return FALSE;
-	}
-
-	for (i = 1; i < currentMaxClients; i++) {
-		if (clients[i])
-			AttendClient(clients[i]);
 	}
 
 	TRACE_EXIT();
@@ -1009,14 +1004,9 @@ OMAPLeaveVT(int scrnIndex, int flags)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int i, ret;
+	int ret;
 
 	TRACE_ENTER();
-
-	for (i = 1; i < currentMaxClients; i++) {
-		if (clients[i])
-			IgnoreClient(clients[i]);
-	}
 
 	ret = drmDropMaster(pOMAP->drmFD);
 	if (ret) {
