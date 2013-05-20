@@ -539,19 +539,24 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		dst_priv->bo = drmmode_scanout_from_drawable(pOMAP->scanouts,
 				pDraw)->bo;
 		omap_bo_reference(dst_priv->bo);
-		omap_bo_unreference(old_bo);
 		if (!drmmode_set_flip_mode(pScrn)) {
 			ERROR_MSG("Could not set flip mode");
+			omap_bo_unreference(dst_priv->bo);
 			return FALSE;
 		}
+		omap_bo_unreference(old_bo);
 	} else {
+		struct omap_bo *old_bo;
+
+		old_bo = dst_priv->bo;
 		omap_bo_reference(pOMAP->scanout);
-		omap_bo_unreference(dst_priv->bo);
 		dst_priv->bo = pOMAP->scanout;
 		if (!drmmode_set_blit_mode(pScrn)) {
 			ERROR_MSG("Could not set blit mode");
+			omap_bo_unreference(pOMAP->scanout);
 			return FALSE;
 		}
+		omap_bo_unreference(old_bo);
 	}
 
 	/* obtain extra ref on pixmaps to avoid them going away while we await
