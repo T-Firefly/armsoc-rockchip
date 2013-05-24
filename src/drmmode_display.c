@@ -640,8 +640,15 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 
 	/* Drop the remaining unused BOs. */
 	for (i = 0; i < MAX_SCANOUTS; i++)
-		if (old_scanouts[i].bo != NULL)
+		if (old_scanouts[i].bo != NULL) {
+			/*
+			 * Set has_resized when discarding active scanouts. This
+			 * ensures we trigger the blit/flip logic which will
+			 * setcrtc to a valid fb if needed
+			 */
+			pOMAP->has_resized = TRUE;
 			omap_bo_unreference(old_scanouts[i].bo);
+		}
 
 	return TRUE;
 }
