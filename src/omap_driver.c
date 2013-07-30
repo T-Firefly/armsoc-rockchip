@@ -860,6 +860,7 @@ OMAPCloseScreen(int scrnIndex, ScreenPtr pScreen)
 {
 	ScrnInfoPtr pScrn = xf86Screens[scrnIndex];
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	Bool ret;
 
 	TRACE_ENTER();
 
@@ -868,6 +869,12 @@ OMAPCloseScreen(int scrnIndex, ScreenPtr pScreen)
 	if (pScrn->vtSema == TRUE) {
 		OMAPLeaveVT(scrnIndex, 0);
 	}
+
+	unwrap(pOMAP, pScreen, CloseScreen);
+	unwrap(pOMAP, pScreen, BlockHandler);
+	unwrap(pOMAP, pScreen, CreateScreenResources);
+
+	ret = (*pScreen->CloseScreen)(scrnIndex, pScreen);
 
 	if (pOMAP->pOMAPEXA) {
 		if (pOMAP->pOMAPEXA->CloseScreen) {
@@ -887,13 +894,9 @@ OMAPCloseScreen(int scrnIndex, ScreenPtr pScreen)
 
 	pScrn->vtSema = FALSE;
 
-	unwrap(pOMAP, pScreen, CloseScreen);
-	unwrap(pOMAP, pScreen, BlockHandler);
-	unwrap(pOMAP, pScreen, CreateScreenResources);
-
 	TRACE_EXIT();
 
-	return (*pScreen->CloseScreen)(scrnIndex, pScreen);
+	return ret;
 }
 
 
