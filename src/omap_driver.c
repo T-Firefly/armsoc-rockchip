@@ -534,7 +534,6 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 
 fail:
 	TRACE_EXIT();
-	OMAPFreeRec(pScrn);
 	return FALSE;
 }
 
@@ -895,9 +894,12 @@ OMAPLeaveVT(VT_FUNC_ARGS_DECL)
 
 
 /**
- * The driver's FreeScreen() function.  This is called at the server's end of
- * life.  This should free any driver-allocated data that was allocated
- * up-to-and-including an unsuccessful ScreenInit() call.
+ * The driver's FreeScreen() function.  It is only called if PreInit() returns
+ * FALSE.  It is not called during normal (error free) operation.
+ * Its primary function is to free any data allocated by PreInit that persists
+ * across server generations, such as the ScrnInfoRec driverPrivate field, and
+ * any privates entries that modules may have allocated.
+ * Per-generation data should be freed by the CloseScreen() function.
  */
 static void
 OMAPFreeScreen(FREE_SCREEN_ARGS_DECL)
