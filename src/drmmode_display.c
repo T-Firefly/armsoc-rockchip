@@ -1874,6 +1874,7 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 	unsigned char *dst, *src;
 	struct fb_var_screeninfo vinfo;
 	int fd;
+	int ret;
 
 	if (!(dst = omap_bo_map(pOMAP->scanout))) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
@@ -1884,13 +1885,15 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 	fd = open("/dev/fb0", O_RDONLY | O_SYNC);
 	if (fd == -1) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"Couldn't open /dev/fb0\n");
+				"Couldn't open /dev/fb0: %s\n",
+				strerror(errno));
 		return;
 	}
 
 	if (ioctl(fd, FBIOGET_VSCREENINFO, &vinfo) < 0) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"Vscreeninfo ioctl failed\n");
+				"Vscreeninfo ioctl failed: %s\n",
+				strerror(errno));
 		goto close_fd;
 	}
 
@@ -1913,7 +1916,9 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 		goto close_fd;
 	}
 
-	omap_bo_cpu_prep(pOMAP->scanout, OMAP_GEM_WRITE);
+	ret = omap_bo_cpu_prep(pOMAP->scanout, OMAP_GEM_WRITE);
+	if (ret)
+		goto munmap_src;
 
 	drmmode_copy_from_to(src, 0, 0, vinfo.xres_virtual, vinfo.yres_virtual,
 			src_pitch, src_cpp,
@@ -1922,10 +1927,13 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 
 	omap_bo_cpu_fini(pOMAP->scanout, 0);
 
-	munmap(src, src_size);
+munmap_src:
+	ret = munmap(src, src_size);
+	if (ret == -1)
+		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
+				"Couldn't munmap /dev/fb0: %s\n",
+				strerror(errno));
 
 close_fd:
 	close(fd);
 }
-
-
