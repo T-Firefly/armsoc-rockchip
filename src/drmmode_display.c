@@ -679,8 +679,10 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 				pScrn->virtualX, pScrn->virtualY);
 
 		ret = omap_bo_add_fb(pOMAP->scanout);
-		if (ret)
-			return FALSE;
+		if (ret) {
+			ret = FALSE;
+			goto out;
+		}
 	}
 
 	/* Save the current mode in case there's a problem: */
@@ -695,7 +697,8 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	crtc->y = y;
 	crtc->rotation = rotation;
 
-	if (!xf86CrtcRotate(crtc))
+	ret = xf86CrtcRotate(crtc);
+	if (!ret)
 		goto done;
 
 	// Fixme - Intel puts this function here, and Nouveau puts it at the end
@@ -706,7 +709,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 
 	ret = drmmode_update_scanouts(pScrn);
 	if (!ret) {
-		ERROR_MSG("Update scanouts failed, ret=%d", ret);
+		ERROR_MSG("Update scanouts failed");
 		goto done;
 	}
 
@@ -729,15 +732,16 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	if (drmmode->cursor)
 		xf86_reload_cursors(pScrn->pScreen);
 
+	ret = TRUE;
 done:
 	if (!ret) {
-		/* If there was a problem, resture the old mode: */
+		/* If there was a problem, restore the old mode: */
 		crtc->x = saved_x;
 		crtc->y = saved_y;
 		crtc->rotation = saved_rotation;
 		crtc->mode = saved_mode;
 	}
-
+out:
 	TRACE_EXIT();
 	return ret;
 }
