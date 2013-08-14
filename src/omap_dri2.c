@@ -101,7 +101,7 @@ static Bool
 mayflip(DrawablePtr pDraw, struct omap_bo *back_bo)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	Bool ret;
 
@@ -147,7 +147,7 @@ static Bool
 canflip(DrawablePtr pDraw, struct omap_bo *back_bo)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	Bool ret;
 	WindowPtr pWindow = NULL;
 	BoxPtr pBox = NULL;
@@ -208,7 +208,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 		unsigned int format)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPDRI2BufferPtr buf = calloc(1, sizeof(*buf));
 	PixmapPtr pPixmap;
 	struct omap_bo *bo;
@@ -291,7 +291,7 @@ OMAPDRI2DestroyBuffer(DrawablePtr pDraw, DRI2BufferPtr buffer)
 	 * instead (since it is at least refcntd)
 	 */
 	ScreenPtr pScreen = buf->pPixmap->drawable.pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 
 	DEBUG_MSG("pDraw=%p, buffer=%p", pDraw, buffer);
 
@@ -308,7 +308,7 @@ OMAPDRI2CopyRegion(DrawablePtr pDraw, RegionPtr pRegion,
 		DRI2BufferPtr pDstBuffer, DRI2BufferPtr pSrcBuffer)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	DrawablePtr pSrcDraw = dri2draw(pDraw, pSrcBuffer);
 	DrawablePtr pDstDraw = dri2draw(pDraw, pDstBuffer);
 	RegionPtr pCopyClip;
@@ -359,7 +359,7 @@ static int
 OMAPDRI2GetMSC(DrawablePtr pDraw, CARD64 *ust, CARD64 *msc)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int crtc_index = drmmode_crtc_index_from_drawable(pScrn, pDraw);
 	drmVBlank vbl = { .request = {
@@ -429,7 +429,7 @@ void
 OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 {
 	ScreenPtr pScreen = cmd->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DrawablePtr pDraw = NULL;
 	int status, i;
@@ -503,7 +503,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		DRI2SwapEventPtr func, void *data)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPDRI2BufferPtr src = OMAPBUF(pSrcBuffer);
 	OMAPDRI2BufferPtr dst = OMAPBUF(pDstBuffer);
@@ -664,7 +664,7 @@ OMAPDRI2ScheduleWaitMSC(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
 		CARD64 divisor, CARD64 remainder)
 {
 	ScreenPtr pScreen = pDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 //	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
 #if 0
@@ -693,7 +693,7 @@ OMAPDRI2ReuseBufferNotify(DrawablePtr pDraw, DRI2BufferPtr buffer)
 Bool
 OMAPDRI2ScreenInit(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	DRI2InfoRec info = {
 			.version           = 6,
@@ -733,7 +733,7 @@ OMAPDRI2ScreenInit(ScreenPtr pScreen)
 void
 OMAPDRI2CloseScreen(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	while (pOMAP->pending_flips > 0) {
 		DEBUG_MSG("waiting..");

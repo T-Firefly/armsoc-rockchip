@@ -100,7 +100,8 @@ OMAPEXAPtr OMAPEXAPTR(ScrnInfoPtr pScrn);
 static inline ScrnInfoPtr
 pix2scrn(PixmapPtr pPixmap)
 {
-	return xf86Screens[(pPixmap)->drawable.pScreen->myNum];
+	ScreenPtr pScreen = pPixmap->drawable.pScreen;
+	return xf86ScreenToScrn(pScreen);
 }
 
 static inline PixmapPtr

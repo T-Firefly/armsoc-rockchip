@@ -884,7 +884,7 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 Bool
 drmmode_cursor_init(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
 	drmmode_cursor_ptr cursor;
@@ -1612,7 +1612,8 @@ int
 drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
 		int* num_flipped)
 {
-	ScrnInfoPtr pScrn = xf86Screens[draw->pScreen->myNum];
+	ScreenPtr pScreen = draw->pScreen;
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86CrtcPtr crtc;
@@ -1690,7 +1691,7 @@ drmmode_handle_uevents(int fd, void *closure)
 
 	if (memcmp(&s.st_rdev, &udev_devnum, sizeof (dev_t)) == 0 &&
 			hotplug && atoi(hotplug) == 1) {
-		RRGetInfo(screenInfo.screens[pScrn->scrnIndex], TRUE);
+		RRGetInfo(xf86ScrnToScreen(pScrn), TRUE);
 	}
 	udev_device_unref(dev);
 }

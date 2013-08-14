@@ -613,7 +613,7 @@ fail:
 static void
 OMAPAccelInit(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
 	if (!pOMAP->NoAccel) {
@@ -668,7 +668,7 @@ OMAPAccelInit(ScreenPtr pScreen)
 static Bool
 OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	VisualPtr visual;
 	xf86CrtcConfigPtr xf86_config;
@@ -908,7 +908,7 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 static Bool
 OMAPCreateScreenResources(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
 	swap(pOMAP, pScreen, CreateScreenResources);

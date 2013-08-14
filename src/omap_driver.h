@@ -205,7 +205,7 @@ static inline Bool has_dmm(OMAPPtr pOMAP)
 /** Return a pointer to the driver's private structure. */
 #define OMAPPTR(p) ((OMAPPtr)((p)->driverPrivate))
 #define OMAPPTR_FROM_SCREEN(pScreen) \
-	((OMAPPtr)(xf86Screens[(pScreen)->myNum])->driverPrivate);
+	((OMAPPtr)(xf86ScreenToScrn(pScreen))->driverPrivate);
 
 #define wrap(priv, real, mem, func) {\
     priv->Saved##mem = real->mem; \

@@ -156,7 +156,7 @@ static int OMAPVideoPutTextureImage(
 		void *closure)
 {
 	ScreenPtr pScreen = pDstPix->drawable.pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPPortPrivPtr pPriv = closure;
 	Bool ret;
@@ -346,7 +346,7 @@ OMAPVideoQueryImageAttributes(ScrnInfoPtr pScrn, int id,
 static XF86VideoAdaptorPtr
 OMAPVideoSetupTexturedVideo(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	XF86VideoAdaptorPtr adapt;
 	OMAPPortPrivPtr pPriv;
@@ -438,7 +438,7 @@ OMAPVideoSetupTexturedVideo(ScreenPtr pScreen)
 Bool
 OMAPVideoScreenInit(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	XF86VideoAdaptorPtr textureAdaptor =
 			OMAPVideoSetupTexturedVideo(pScreen);
@@ -461,7 +461,7 @@ OMAPVideoScreenInit(ScreenPtr pScreen)
 void
 OMAPVideoCloseScreen(ScreenPtr pScreen)
 {
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	if (pOMAP->textureAdaptor) {
 		OMAPPortPrivPtr pPriv = (OMAPPortPrivPtr)

@@ -53,7 +53,7 @@ OMAPVidCopyArea(DrawablePtr pSrcDraw, BoxPtr pSrcBox,
 		RegionPtr clipBoxes)
 {
 	ScreenPtr pScreen = pDstDraw->pScreen;
-	ScrnInfoPtr pScrn = xf86Screens[pScreen->myNum];
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
 	PixmapPtr pSrcPix = draw2pix(pSrcDraw);
 	PixmapPtr pOsdPix = draw2pix(pOsdDraw);
 	PixmapPtr pDstPix = draw2pix(pDstDraw);
