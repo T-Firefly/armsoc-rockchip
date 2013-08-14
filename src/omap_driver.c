@@ -309,7 +309,7 @@ OMAPProbe(DriverPtr drv, int flags)
 {
 	int i;
 	ScrnInfoPtr pScrn;
-	GDevPtr *devSections;
+	GDevPtr *devSections = NULL;
 	int numDevSections;
 	Bool foundScreen = FALSE;
 
@@ -326,7 +326,7 @@ OMAPProbe(DriverPtr drv, int flags)
 			 */
 			numDevSections = 1;
 		} else {
-			return FALSE;
+			goto out;
 		}
 	}
 
@@ -341,6 +341,7 @@ OMAPProbe(DriverPtr drv, int flags)
 				xf86AddBusDeviceToConfigure(OMAP_DRIVER_NAME,
 						BUS_NONE, NULL, i);
 				foundScreen = TRUE;
+				drmClose(fd);
 				continue;
 			}
 
@@ -348,7 +349,8 @@ OMAPProbe(DriverPtr drv, int flags)
 
 			if (!pScrn) {
 				EARLY_ERROR_MSG("Cannot allocate a ScrnInfoPtr");
-				return FALSE;
+				drmClose(fd);
+				goto free_sections;
 			}
 
 			if (devSections) {
@@ -376,7 +378,11 @@ OMAPProbe(DriverPtr drv, int flags)
 			drmClose(fd);
 		}
 	}
+
+free_sections:
 	free(devSections);
+
+out:
 	return foundScreen;
 }
 
