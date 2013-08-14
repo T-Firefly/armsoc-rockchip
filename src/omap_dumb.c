@@ -249,7 +249,13 @@ void *omap_bo_map(struct omap_bo *bo)
 		if (res)
 			return NULL;
 
-		bo->map_addr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED, bo->dev->fd, map_dumb.offset);
+		bo->map_addr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE,
+				MAP_SHARED, bo->dev->fd, map_dumb.offset);
+		if (bo->map_addr == MAP_FAILED) {
+			xf86DrvMsg(-1, X_ERROR, "mmap bo failed: %s\n",
+					strerror(errno));
+			bo->map_addr = NULL;
+		}
 	}
 
 	return bo->map_addr;

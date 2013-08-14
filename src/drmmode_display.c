@@ -1897,9 +1897,10 @@ void drmmode_copy_fb(ScrnInfoPtr pScrn)
 	src_size = vinfo.yres_virtual * src_pitch;
 
 	src = mmap(NULL, src_size, PROT_READ, MAP_SHARED, fd, 0);
-	if (!src) {
+	if (src == MAP_FAILED) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,
-				"Couldn't mmap /dev/fb0\n");
+				"Couldn't mmap /dev/fb0: %s\n",
+				strerror(errno));
 		goto close_fd;
 	}
 
