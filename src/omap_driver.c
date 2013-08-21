@@ -868,6 +868,9 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 		OMAPLeaveVT(VT_FUNC_ARGS(0));
 	}
 
+	if (pOMAP->HWCursor)
+		drmmode_cursor_fini(pScreen);
+
 	unwrap(pOMAP, pScreen, CloseScreen);
 	unwrap(pOMAP, pScreen, BlockHandler);
 	unwrap(pOMAP, pScreen, CreateScreenResources);

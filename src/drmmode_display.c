@@ -967,6 +967,29 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	return FALSE;
 }
 
+void
+drmmode_cursor_fini(ScreenPtr pScreen)
+{
+	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
+	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	drmmode_cursor_ptr cursor = drmmode->cursor;
+
+	if (!cursor)
+		return;
+
+	xf86_cursors_fini(pScreen);
+
+	/* Report any errors, but keep going... */
+	if (drmModeRmFB(drmmode->fd, cursor->fb_id))
+		ERROR_MSG("drmModeRmFB(%u) failed: %s", cursor->fb_id,
+				strerror(errno));
+
+	omap_bo_unreference(cursor->bo);
+
+	free(cursor);
+	drmmode->cursor = NULL;
+}
+
 #ifdef OMAP_SUPPORT_GAMMA
 static void
 drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
