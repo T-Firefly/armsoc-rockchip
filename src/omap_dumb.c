@@ -78,7 +78,7 @@ struct drm_exynos_gem_cpu_release {
 
 struct omap_device *omap_device_new(int fd)
 {
-	struct omap_device *new_dev = malloc(sizeof(*new_dev));
+	struct omap_device *new_dev = calloc(1, sizeof *new_dev);
 	if (!new_dev)
 		return NULL;
 

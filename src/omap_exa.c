@@ -64,8 +64,9 @@ OMAPCreatePixmap (ScreenPtr pScreen, int width, int height,
 		int depth, int usage_hint, int bitsPerPixel,
 		int *new_fb_pitch)
 {
-	OMAPPixmapPrivPtr priv = calloc(sizeof(OMAPPixmapPrivRec), 1);
+	OMAPPixmapPrivPtr priv;
 
+	priv = calloc(1, sizeof *priv);
 	/* actual allocation of buffer is in OMAPModifyPixmapHeader */
 
 	return priv;

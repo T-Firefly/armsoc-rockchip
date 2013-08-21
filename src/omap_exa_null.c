@@ -95,16 +95,20 @@ FreeScreen(FREE_SCREEN_ARGS_DECL)
 OMAPEXAPtr
 InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 {
-	OMAPNullEXAPtr null_exa = calloc(sizeof (*null_exa), 1);
-	OMAPEXAPtr omap_exa = (OMAPEXAPtr)null_exa;
+	OMAPNullEXAPtr null_exa;
+	OMAPEXAPtr omap_exa;
 	ExaDriverPtr exa;
 
 	INFO_MSG("Soft EXA mode");
 
+	null_exa = calloc(1, sizeof *null_exa);
+	omap_exa = (OMAPEXAPtr)null_exa;
+	if (!null_exa)
+		goto out;
+
 	exa = exaDriverAlloc();
-	if (!exa) {
-		goto fail;
-	}
+	if (!exa)
+		goto free_null_exa;
 
 	null_exa->exa = exa;
 
@@ -134,9 +138,9 @@ InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 	exa->CheckComposite = CheckCompositeFail;
 	exa->PrepareComposite = PrepareCompositeFail;
 
-	if (! exaDriverInit(pScreen, exa)) {
+	if (!exaDriverInit(pScreen, exa)) {
 		ERROR_MSG("exaDriverInit failed");
-		goto fail;
+		goto free_exa;
 	}
 
 	omap_exa->CloseScreen = CloseScreen;
@@ -144,10 +148,11 @@ InitNullEXA(ScreenPtr pScreen, ScrnInfoPtr pScrn, int fd)
 
 	return omap_exa;
 
-fail:
-	if (null_exa) {
-		free(null_exa);
-	}
+free_exa:
+	free(exa);
+free_null_exa:
+	free(null_exa);
+out:
 	return NULL;
 }
 

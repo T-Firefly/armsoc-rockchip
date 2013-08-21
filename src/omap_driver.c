@@ -247,12 +247,16 @@ OMAPSetup(pointer module, pointer opts, int *errmaj, int *errmin)
 static Bool
 OMAPGetRec(ScrnInfoPtr pScrn)
 {
-	if (pScrn->driverPrivate != NULL)
+	OMAPPtr pOMAP = pScrn->driverPrivate;
+
+	if (pOMAP != NULL)
 		return TRUE;
 
-	pScrn->driverPrivate = calloc(1, sizeof(OMAPRec));
-	if (pScrn->driverPrivate == NULL)
+	pOMAP = calloc(1, sizeof *pOMAP);
+	if (pOMAP == NULL)
 		return FALSE;
+
+	pScrn->driverPrivate = pOMAP;
 
 	return TRUE;
 }
@@ -481,7 +485,7 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 	 * Process the "xorg.conf" file options:
 	 */
 	xf86CollectOptions(pScrn, NULL);
-	if (!(pOMAP->pOptionInfo = calloc(1, sizeof(OMAPOptions))))
+	if (!(pOMAP->pOptionInfo = malloc(sizeof(OMAPOptions))))
 		return FALSE;
 	memcpy(pOMAP->pOptionInfo, OMAPOptions, sizeof(OMAPOptions));
 	xf86ProcessOptions(pScrn->scrnIndex, pOMAP->pEntityInfo->device->options,

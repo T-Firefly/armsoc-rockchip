@@ -209,7 +209,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPDRI2BufferPtr buf = calloc(1, sizeof(*buf));
+	OMAPDRI2BufferPtr buf;
 	PixmapPtr pPixmap;
 	struct omap_bo *bo;
 	int ret;
@@ -217,9 +217,9 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	DEBUG_MSG("pDraw=%p, attachment=%d, format=%08x",
 			pDraw, attachment, format);
 
-	if (!buf) {
+	buf = calloc(1, sizeof *buf);
+	if (!buf)
 		return NULL;
-	}
 
 	if (attachment == DRI2BufferFrontLeft) {
 		pPixmap = draw2pix(pDraw);
@@ -507,11 +507,15 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPDRI2BufferPtr src = OMAPBUF(pSrcBuffer);
 	OMAPDRI2BufferPtr dst = OMAPBUF(pDstBuffer);
-	OMAPDRISwapCmd *cmd = calloc(1, sizeof(*cmd));
+	OMAPDRISwapCmd *cmd;
 	int src_fb_id, dst_fb_id;
 	OMAPPixmapPrivPtr src_priv, dst_priv;
 	int new_canflip, ret, num_flipped;
 	RegionRec region;
+
+	cmd = calloc(1, sizeof *cmd);
+	if (!cmd)
+		return FALSE;
 
 	cmd->client = client;
 	cmd->pScreen = pScreen;
