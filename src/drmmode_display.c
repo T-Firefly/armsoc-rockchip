@@ -102,7 +102,7 @@
 
 typedef struct {
 	/* hardware cursor: */
-	drmModePlane *ovr;
+	uint32_t plane_id;
 	struct omap_bo *bo;
 	uint32_t fb_id;
 	uint32_t zpos_prop_id;
@@ -802,7 +802,7 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	}
 
 	/* note src coords (last 4 args) are in Q16 format */
-	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
+	drmModeSetPlane(drmmode->fd, cursor->plane_id,
 			drmmode_crtc->mode_crtc->crtc_id, cursor->fb_id, 0,
 			crtc_x, crtc_y, w, h, src_x<<16, src_y<<16, w<<16, h<<16);
 }
@@ -820,7 +820,7 @@ drmmode_hide_cursor(xf86CrtcPtr crtc)
 	drmmode_crtc->cursor_visible = FALSE;
 
 	/* set plane's fb_id to 0 to disable it */
-	drmModeSetPlane(drmmode->fd, cursor->ovr->plane_id,
+	drmModeSetPlane(drmmode->fd, cursor->plane_id,
 			drmmode_crtc->mode_crtc->crtc_id, 0, 0,
 			0, 0, 0, 0, 0, 0, 0, 0);
 }
@@ -837,7 +837,7 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 
 	drmmode_crtc->cursor_visible = TRUE;
 
-	drmModeObjectSetProperty(drmmode->fd, cursor->ovr->plane_id,
+	drmModeObjectSetProperty(drmmode->fd, cursor->plane_id,
 				 DRM_MODE_OBJECT_PLANE,
 				 cursor->zpos_prop_id, 1);
 
@@ -889,10 +889,10 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
 	drmmode_cursor_ptr cursor;
 	drmModePlaneRes *plane_resources;
-	drmModePlane *ovr;
 	drmModeObjectPropertiesPtr props;
 	drmModePropertyPtr prop;
 	int i;
+	uint32_t plane_id;
 
 	/* technically we probably don't have any size limit.. since we
 	 * are just using an overlay... but xserver will always create
@@ -924,13 +924,11 @@ drmmode_cursor_init(ScreenPtr pScreen)
 		return FALSE;
 	}
 
-	ovr = drmModeGetPlane(drmmode->fd, plane_resources->planes[0]);
-	if (!ovr) {
-		ERROR_MSG("drmModeGetPlane failed: %s", strerror(errno));
-		return FALSE;
-	}
+	/* HACK: HW Cursor is always using the first plane */
+	plane_id = plane_resources->planes[0];
+	INFO_MSG("HW Cursor using [PLANE:%u]", plane_id);
 
-	props = drmModeObjectGetProperties(drmmode->fd, ovr->plane_id,
+	props = drmModeObjectGetProperties(drmmode->fd, plane_id,
 					   DRM_MODE_OBJECT_PLANE);
 	if (props) {
 		for (i = 0; i < props->count_props; i++) {
@@ -943,7 +941,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 		drmModeFreeObjectProperties(props);
 	}
 
-	cursor->ovr = ovr;
+	cursor->plane_id = plane_id;
 	cursor->bo  = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32,
 			OMAP_BO_SCANOUT | OMAP_BO_WC);
 
