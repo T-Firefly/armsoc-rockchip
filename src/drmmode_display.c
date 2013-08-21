@@ -893,6 +893,8 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	drmModePropertyPtr prop;
 	int i;
 	uint32_t plane_id;
+	int zpos_prop_id;
+	Bool ret = FALSE;
 
 	/* technically we probably don't have any size limit.. since we
 	 * are just using an overlay... but xserver will always create
@@ -902,12 +904,12 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	const int w = CURSORW, h = CURSORH;
 	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
 
-	if (drmmode->cursor) {
-		INFO_MSG("cursor already initialized");
-		return TRUE;
-	}
+	TRACE_ENTER();
 
-	cursor = calloc(1, sizeof(drmmode_cursor_rec));
+	if (drmmode->cursor) {
+		INFO_MSG("HW Cursor already initialized");
+		goto out;
+	}
 
 	/* find an unused plane which can be used as a mouse cursor.  Note
 	 * that we cheat a bit, in order to not burn one overlay per crtc,
@@ -916,34 +918,57 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	plane_resources = drmModeGetPlaneResources(drmmode->fd);
 	if (!plane_resources) {
 		ERROR_MSG("drmModeGetPlaneResources failed: %s", strerror(errno));
-		return FALSE;
+		goto out;
 	}
 
 	if (plane_resources->count_planes < 1) {
-		ERROR_MSG("not enough planes for HW cursor");
-		return FALSE;
+		ERROR_MSG("HW Cursor: not enough planes");
+		drmModeFreePlaneResources(plane_resources);
+		goto out;
 	}
 
-	/* HACK: HW Cursor is always using the first plane */
+	/* HACK: HW Cursor always uses the first plane */
 	plane_id = plane_resources->planes[0];
 	INFO_MSG("HW Cursor using [PLANE:%u]", plane_id);
 
+	drmModeFreePlaneResources(plane_resources);
+
 	props = drmModeObjectGetProperties(drmmode->fd, plane_id,
 					   DRM_MODE_OBJECT_PLANE);
-	if (props) {
-		for (i = 0; i < props->count_props; i++) {
-			prop = drmModeGetProperty(drmmode->fd, props->props[i]);
-
-			if (!strcmp(prop->name, "zpos"))
-				cursor->zpos_prop_id = prop->prop_id;
-			drmModeFreeProperty(prop);
-		}
-		drmModeFreeObjectProperties(props);
+	if (!props) {
+		ERROR_MSG("No properties found for DRM [PLANE:%u]", plane_id);
+		goto out;
 	}
 
+	/* Find first "zpos" property for our HW Cursor plane */
+	zpos_prop_id = -1;
+	for (i = 0; i < props->count_props && zpos_prop_id == -1; i++) {
+		prop = drmModeGetProperty(drmmode->fd, props->props[i]);
+
+		if (!strcmp(prop->name, "zpos"))
+			zpos_prop_id = prop->prop_id;
+		drmModeFreeProperty(prop);
+	}
+	drmModeFreeObjectProperties(props);
+
+	if (zpos_prop_id == -1) {
+		ERROR_MSG("No 'zpos' property found for [PLANE:%u]", plane_id);
+		goto out;
+	}
+
+	cursor = calloc(1, sizeof *cursor);
+	if (!cursor) {
+		ERROR_MSG("HW Cursor allocation failed");
+		goto out;
+	}
+	cursor->zpos_prop_id = zpos_prop_id;
 	cursor->plane_id = plane_id;
-	cursor->bo  = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32,
+	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32,
 			OMAP_BO_SCANOUT | OMAP_BO_WC);
+	if (!cursor->bo) {
+		ERROR_MSG("error allocating hw cursor buffer");
+		goto err_free_cursor;
+	}
 
 	handles[0] = omap_bo_handle(cursor->bo);
 	pitches[0] = omap_bo_pitch(cursor->bo);
@@ -952,19 +977,36 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	if (drmModeAddFB2(drmmode->fd, w, h, DRM_FORMAT_ARGB8888,
 			handles, pitches, offsets, &cursor->fb_id, 0)) {
 		ERROR_MSG("drmModeAddFB2 failed: %s", strerror(errno));
-		return FALSE;
+		goto err_unref_cursor;
 	}
+
+	INFO_MSG("HW Cursor using [FB:%u]", cursor->fb_id);
 
 	// see definition of CURSORPAD
-	if (xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h,
-		HARDWARE_CURSOR_ARGB | HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
-		INFO_MSG("HW cursor initialized");
-		drmmode->cursor = cursor;
-		return TRUE;
+	if (!xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h,
+			HARDWARE_CURSOR_ARGB |
+			HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
+		ERROR_MSG("xf86_cursors_init() failed");
+		goto err_rm_fb;
 	}
 
-	// TODO cleanup when things fail..
-	return FALSE;
+	INFO_MSG("HW cursor initialized");
+	drmmode->cursor = cursor;
+
+	ret = TRUE;
+	goto out;
+
+err_rm_fb:
+	if (drmModeRmFB(drmmode->fd, cursor->fb_id))
+		ERROR_MSG("drmModeRmFB(%u) failed: %s", cursor->fb_id,
+				strerror(errno));
+err_unref_cursor:
+	omap_bo_unreference(cursor->bo);
+err_free_cursor:
+	free(cursor);
+out:
+	TRACE_EXIT();
+	return ret;
 }
 
 void
