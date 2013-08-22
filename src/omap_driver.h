@@ -51,7 +51,6 @@
 #include "xf86Resources.h"
 #include "xf86RAC.h"
 #endif
-#include "xf86xv.h"
 #include "xf86Crtc.h"
 #include "xf86RandR12.h"
 #include "xf86drm.h"
@@ -177,8 +176,6 @@ typedef struct _OMAPRec
 	/** Pointer to the entity structure for this screen. */
 	EntityInfoPtr		pEntityInfo;
 
-	XF86VideoAdaptorPtr textureAdaptor;
-
 	/** Flips we are waiting for: */
 	int					pending_flips;
        /* For invalidating backbuffers on Hotplug */
@@ -188,14 +185,6 @@ typedef struct _OMAPRec
 /*
  * Misc utility macros:
  */
-
-/* do we support video? */
-static inline Bool has_video(OMAPPtr pOMAP)
-{
-	return pOMAP->pOMAPEXA &&
-			pOMAP->pOMAPEXA->GetFormats &&
-			pOMAP->pOMAPEXA->PutTextureImage;
-}
 
 static inline Bool has_dmm(OMAPPtr pOMAP)
 {
@@ -265,27 +254,5 @@ typedef struct _OMAPDRISwapCmd OMAPDRISwapCmd;
 Bool OMAPDRI2ScreenInit(ScreenPtr pScreen);
 void OMAPDRI2CloseScreen(ScreenPtr pScreen);
 void OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd);
-
-/**
- * XV functions..
- */
-Bool OMAPVideoScreenInit(ScreenPtr pScreen);
-void OMAPVideoCloseScreen(ScreenPtr pScreen);
-
-/**
- * EXA util functions.. move to EXA core?
- */
-
-typedef int (*OMAPPutTextureImageProc)(
-		PixmapPtr pSrcPix, BoxPtr pSrcBox,
-		PixmapPtr pOsdPix, BoxPtr pOsdBox,
-		PixmapPtr pDstPix, BoxPtr pDstBox,
-		void *closure);
-
-Bool OMAPVidCopyArea(DrawablePtr pSrcDraw, BoxPtr pSrcBox,
-		DrawablePtr pOsdDraw, BoxPtr pOsdBox,
-		DrawablePtr pDstDraw, BoxPtr pDstBox,
-		OMAPPutTextureImageProc PutTextureImage, void *closure,
-		RegionPtr clipBoxes);
 
 #endif /* __OMAP_DRV_H__ */

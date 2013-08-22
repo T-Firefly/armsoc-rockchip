@@ -651,14 +651,6 @@ OMAPAccelInit(ScreenPtr pScreen)
 	} else {
 		pOMAP->dri = FALSE;
 	}
-
-#if 0
-	if (OMAPVideoScreenInit(pScreen)) {
-		INFO_MSG("Initialized XV");
-	} else {
-		ERROR_MSG("Could not initialize XV");
-	}
-#endif
 }
 
 /**
@@ -887,10 +879,6 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 		OMAPDRI2CloseScreen(pScreen);
 	}
 
-#if 0
-	OMAPVideoCloseScreen(pScreen);
-#endif
-
 	OMAPUnmapMem(pScrn);
 
 	pScrn->vtSema = FALSE;
@@ -933,8 +921,6 @@ OMAPBlockHandler(BLOCKHANDLER_ARGS_DECL)
 	swap(pOMAP, pScreen, BlockHandler);
 	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
 	swap(pOMAP, pScreen, BlockHandler);
-
-	/* TODO OMAPVideoBlockHandler(), etc.. */
 }
 
 

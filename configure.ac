@@ -41,7 +41,6 @@ AC_ARG_WITH(xorg-module-dir,
 # Checks for extensions
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
-XORG_DRIVER_CHECK_EXT(XV, videoproto)
 XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 
 # Checks for pkg-config packages
@@ -78,11 +77,6 @@ if test "$DRI" = yes; then
         PKG_CHECK_MODULES(DRI, [xf86driproto glproto])
         AC_DEFINE(XF86DRI,1,[Enable DRI driver support])
         AC_DEFINE(XF86DRI_DEVEL,1,[Enable developmental DRI driver support])
-fi
-
-AM_CONDITIONAL(VIDEO_DEBUG, test x$VIDEO_DEBUG = xyes)
-if test "$VIDEO_DEBUG" = yes; then
-	AC_DEFINE(VIDEO_DEBUG,1,[Enable debug support])
 fi
 
 AC_SUBST([DRI_CFLAGS])
