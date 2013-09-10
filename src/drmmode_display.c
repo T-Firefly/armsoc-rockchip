@@ -654,6 +654,8 @@ static Bool
 drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		Rotation rotation, int x, int y)
 {
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	ScrnInfoPtr pScrn = crtc->scrn;
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
@@ -716,10 +718,12 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		drmmode_output_dpms(output, DPMSModeOn);
 	}
 
-	// TODO: only call this if we are not using sw cursor.. ie. bad to call this
-	// if we haven't called xf86InitCursor()!!
-	//	if (pScrn->pScreen)
-	//		xf86_reload_cursors(pScrn->pScreen);
+	/*
+	 * The screen has reconfigured, so reload hw cursor images as needed,
+	 * and adjust cursor positions.
+	 */
+	if (drmmode->cursor)
+		xf86_reload_cursors(pScrn->pScreen);
 
 done:
 	if (!ret) {
