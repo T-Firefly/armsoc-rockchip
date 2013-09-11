@@ -511,6 +511,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	int src_fb_id, dst_fb_id;
 	OMAPPixmapPrivPtr src_priv, dst_priv;
 	int new_canflip, ret, num_flipped;
+	RegionRec region;
 
 	cmd->client = client;
 	cmd->pScreen = pScreen;
@@ -523,6 +524,12 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	cmd->data = data;
 	cmd->x = pDraw->x;
 	cmd->y = pDraw->y;
+
+	region.extents.x1 = region.extents.y1 = 0;
+	region.extents.x2 = cmd->pDstPixmap->drawable.width;
+	region.extents.y2 = cmd->pDstPixmap->drawable.height;
+	region.data = NULL;
+	DamageRegionAppend(&cmd->pDstPixmap->drawable, &region);
 
 	DEBUG_MSG("%d -> %d", pSrcBuffer->attachment, pDstBuffer->attachment);
 
@@ -542,6 +549,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		if (!drmmode_set_flip_mode(pScrn)) {
 			ERROR_MSG("Could not set flip mode");
 			omap_bo_unreference(dst_priv->bo);
+			DamageRegionProcessPending(&cmd->pDstPixmap->drawable);
 			return FALSE;
 		}
 		omap_bo_unreference(old_bo);
@@ -554,10 +562,12 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		if (!drmmode_set_blit_mode(pScrn)) {
 			ERROR_MSG("Could not set blit mode");
 			omap_bo_unreference(pOMAP->scanout);
+			DamageRegionProcessPending(&cmd->pDstPixmap->drawable);
 			return FALSE;
 		}
 		omap_bo_unreference(old_bo);
 	}
+	DamageRegionProcessPending(&cmd->pDstPixmap->drawable);
 
 	/* obtain extra ref on pixmaps to avoid them going away while we await
 	 * the page flip event:
