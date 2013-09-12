@@ -192,6 +192,28 @@ static inline enum omap_gem_op idx2op(int index)
 	}
 }
 
+/* TODO: Move to EXA core */
+static const char *
+exa_index_to_string(int index)
+{
+	switch (index) {
+	case EXA_PREPARE_DEST:
+		return "DEST";
+	case EXA_PREPARE_SRC:
+		return "SRC";
+	case EXA_PREPARE_MASK:
+		return "MASK";
+	case EXA_PREPARE_AUX_DEST:
+		return "AUX_DEST";
+	case EXA_PREPARE_AUX_SRC:
+		return "AUX_SRC";
+	case EXA_PREPARE_AUX_MASK:
+		return "AUX_MASK";
+	default:
+		return "unknown";
+	}
+}
+
 /**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
  *
@@ -233,9 +255,12 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 	const enum omap_gem_op op = idx2op(index);
 	int i;
+	Bool res = FALSE;
+
+	TRACE_ENTER();
 
 	if (!priv->bo)
-		return FALSE;
+		goto out;
 
 	/* If this is one of our scanouts, give back the main scanout.
 	 * We don't want 2D acceleration to ever touch the per-crtc
@@ -249,7 +274,7 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 			 * buffer.
 			 */
 			if (!drmmode_set_blit_mode(pScrn))
-				return FALSE;
+				goto out;
 			/* If we're going to write to the One True scanout buffer, the
 			 * per-crtc scanout buffer should be invalidated.
 			 */
@@ -263,9 +288,8 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
 	}
 
-	if (!pPixmap->devPrivate.ptr) {
-		return FALSE;
-	}
+	if (!pPixmap->devPrivate.ptr)
+		goto out;
 
 	/* wait for blits complete.. note we could be a bit more clever here
 	 * for non-DRI2 buffers and use separate OMAP{Prepare,Finish}GPUAccess()
@@ -274,11 +298,16 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	 * intervening GPU operation (or if we go to a stronger op mask, ie.
 	 * first CPU access is READ and second is WRITE).
 	 */
-	if (omap_bo_cpu_prep(priv->bo, op)) {
-		return FALSE;
-	}
+	if (omap_bo_cpu_prep(priv->bo, op))
+		goto out;
 
-	return TRUE;
+	res = TRUE;
+out:
+	if (!res)
+		ERROR_MSG("Unable to prepare access for EXA PIXMAP %s (%d)",
+				exa_index_to_string(index), index);
+	TRACE_EXIT();
+	return res;
 }
 
 /**
@@ -294,8 +323,10 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 _X_EXPORT void
 OMAPFinishAccess(PixmapPtr pPixmap, int index)
 {
+	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 
+	TRACE_ENTER();
 	pPixmap->devPrivate.ptr = NULL;
 
 	/* NOTE: can we use EXA migration module to track which parts of the
@@ -303,6 +334,7 @@ OMAPFinishAccess(PixmapPtr pPixmap, int index)
 	 * do a more precise cache flush..
 	 */
 	omap_bo_cpu_fini(priv->bo, idx2op(index));
+	TRACE_EXIT();
 }
 
 /**
