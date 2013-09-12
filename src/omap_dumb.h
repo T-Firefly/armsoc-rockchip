@@ -21,8 +21,8 @@
  * SOFTWARE.
  */
 
-#ifndef OMAP_DRMIF_FB_H_
-#define OMAP_DRMIF_FB_H_
+#ifndef OMAP_DUMB_H_
+#define OMAP_DUMB_H_
 
 #include <stdint.h>
 
@@ -62,5 +62,4 @@ int omap_bo_clear(struct omap_bo *bo);
 void omap_bo_reference(struct omap_bo *bo);
 void omap_bo_unreference(struct omap_bo *bo);
 
-#endif /* OMAP_DRMIF_FB_H_ */
-
+#endif /* OMAP_DUMB_H_ */
