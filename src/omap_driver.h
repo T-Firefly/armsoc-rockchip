@@ -62,6 +62,10 @@
 
 #include "omap_exa.h"
 
+/* Supported chipsets */
+enum OMAP_CHIPSET {
+	OMAP_CHIPSET_EXYNOS5,	/* Quelle bizarre... :) */
+};
 
 #define OMAP_VERSION		1000	/* Apparently not used by X server */
 #define OMAP_NAME			"ARMSOC"	/* Name used to prefix messages */
@@ -138,19 +142,11 @@ enum OMAPFlipMode
 /** The driver's Screen-specific, "private" data structure. */
 typedef struct _OMAPRec
 {
-	/** Chipset id */
-	int					chipset;
-
 	/**
 	 * Pointer to a structure used to communicate and coordinate with an
 	 * external EXA library (if loaded).
 	 */
 	OMAPEXAPtr			pOMAPEXA;
-
-	/** various user-configurable options: */
-	Bool				dri;
-	Bool				HWCursor;
-	Bool				NoAccel;
 
 	/** File descriptor of the connection with the DRM. */
 	int					drmFD;
@@ -178,18 +174,13 @@ typedef struct _OMAPRec
 
 	/** Flips we are waiting for: */
 	int					pending_flips;
-       /* For invalidating backbuffers on Hotplug */
+	/* For invalidating backbuffers on Hotplug */
 	Bool			has_resized;
 } OMAPRec, *OMAPPtr;
 
 /*
  * Misc utility macros:
  */
-
-static inline Bool has_dmm(OMAPPtr pOMAP)
-{
-	return pOMAP->chipset >= 0x4430;
-}
 
 /** Return a pointer to the driver's private structure. */
 #define OMAPPTR(p) ((OMAPPtr)((p)->driverPrivate))

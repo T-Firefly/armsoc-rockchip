@@ -675,10 +675,7 @@ OMAPDRI2ScheduleWaitMSC(ClientPtr client, DrawablePtr pDraw, CARD64 target_msc,
 {
 	ScreenPtr pScreen = pDraw->pScreen;
 	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-//	OMAPPtr pOMAP = OMAPPTR(pScrn);
 
-#if 0
-#endif
 	ERROR_MSG("not implemented");
 	return FALSE;
 }

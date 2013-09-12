@@ -69,10 +69,4 @@ extern _X_EXPORT Bool omapDebug;
 		do { xf86Msg(X_ERROR, "ERROR: " fmt "\n",\
 				##__VA_ARGS__); } while (0)
 
-
-extern unsigned int
-OMAPCalculateStride(unsigned int fbWidth, unsigned int bitsPerPixel);
-extern unsigned int
-OMAPCalculateTiledStride(unsigned int width, unsigned int bitsPerPixel);
-
 #endif /* __OMAP_UTIL_H__ */
