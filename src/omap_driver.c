@@ -51,8 +51,6 @@ static Bool OMAPScreenInit(SCREEN_INIT_ARGS_DECL);
 static void OMAPLoadPalette(ScrnInfoPtr pScrn, int numColors, int *indices,
 		LOCO * colors, VisualPtr pVisual);
 static Bool OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL);
-static Bool OMAPCreateScreenResources(ScreenPtr pScreen);
-static void OMAPBlockHandler(BLOCKHANDLER_ARGS_DECL);
 static Bool OMAPSwitchMode(SWITCH_MODE_ARGS_DECL);
 static void OMAPAdjustFrame(ADJUST_FRAME_ARGS_DECL);
 static Bool OMAPEnterVT(VT_FUNC_ARGS_DECL);
@@ -696,8 +694,6 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 
 	/* Wrap some screen functions: */
 	wrap(pOMAP, pScreen, CloseScreen, OMAPCloseScreen);
-	wrap(pOMAP, pScreen, CreateScreenResources, OMAPCreateScreenResources);
-	wrap(pOMAP, pScreen, BlockHandler, OMAPBlockHandler);
 
 	drmmode_screen_init(pScrn);
 
@@ -754,8 +750,6 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 	drmmode_cursor_fini(pScreen);
 
 	unwrap(pOMAP, pScreen, CloseScreen);
-	unwrap(pOMAP, pScreen, BlockHandler);
-	unwrap(pOMAP, pScreen, CreateScreenResources);
 
 	ret = (*pScreen->CloseScreen)(CLOSE_SCREEN_ARGS);
 
@@ -772,42 +766,6 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 
 	return ret;
 }
-
-
-
-/**
- * Adjust the screen pixmap for the current location of the front buffer.
- * This is done at EnterVT when buffers are bound as long as the resources
- * have already been created, but the first EnterVT happens before
- * CreateScreenResources.
- */
-static Bool
-OMAPCreateScreenResources(ScreenPtr pScreen)
-{
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-
-	swap(pOMAP, pScreen, CreateScreenResources);
-	if (!(*pScreen->CreateScreenResources) (pScreen))
-		return FALSE;
-	swap(pOMAP, pScreen, CreateScreenResources);
-
-	return TRUE;
-}
-
-
-static void
-OMAPBlockHandler(BLOCKHANDLER_ARGS_DECL)
-{
-	SCREEN_PTR(arg);
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-
-	swap(pOMAP, pScreen, BlockHandler);
-	(*pScreen->BlockHandler) (BLOCKHANDLER_ARGS);
-	swap(pOMAP, pScreen, BlockHandler);
-}
-
 
 
 /**
