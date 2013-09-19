@@ -49,6 +49,8 @@ struct omap_bo {
 	uint8_t bpp;
 	uint32_t pitch;
 	int refcnt;
+	int acquired_exclusive;
+	int acquire_cnt;
 };
 
 enum {
@@ -134,6 +136,8 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 	new_buf->depth = depth;
 	new_buf->bpp = create_dumb.bpp;
 	new_buf->refcnt = 1;
+	new_buf->acquired_exclusive = 0;
+	new_buf->acquire_cnt = 0;
 
 	return new_buf;
 }
@@ -265,12 +269,22 @@ int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 {
 	struct drm_exynos_gem_cpu_acquire acquire;
 	int ret;
-	acquire.handle = bo->handle;
-	if (op == OMAP_GEM_WRITE) {
-		acquire.flags = DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE;
-	} else {
-		acquire.flags = DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED;
+
+	if (bo->acquire_cnt) {
+		if (op & OMAP_GEM_WRITE
+			&& !bo->acquired_exclusive) {
+			xf86DrvMsg(-1, X_ERROR, "attempting to acquire read locked surface for write");
+			return 1;
+		}
+		bo->acquire_cnt++;
+		return 0;
 	}
+	bo->acquired_exclusive = op & OMAP_GEM_WRITE;
+	bo->acquire_cnt++;
+	acquire.handle = bo->handle;
+	acquire.flags = (op & OMAP_GEM_WRITE)
+		? DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE
+		: DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED;
 	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE, &acquire);
 	if (ret)
 		xf86DrvMsg(-1, X_ERROR, "DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE failed: %d", ret);
@@ -281,6 +295,12 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 {
 	struct drm_exynos_gem_cpu_release release;
 	int ret;
+
+	assert(bo->acquire_cnt > 0);
+
+	if (--bo->acquire_cnt != 0) {
+		return 0;
+	}
 	release.handle = bo->handle;
 	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE, &release);
 	if (ret)

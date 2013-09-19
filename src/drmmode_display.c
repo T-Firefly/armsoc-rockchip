@@ -470,8 +470,10 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		return -EIO;
 	}
 
-	omap_bo_cpu_prep(src_bo, OMAP_GEM_READ);
+	// acquire for write first, so if (probably impossible) src==dst acquire
+	// for read can succeed
 	omap_bo_cpu_prep(dst_bo, OMAP_GEM_WRITE);
+	omap_bo_cpu_prep(src_bo, OMAP_GEM_READ);
 
 	drmmode_copy_from_to(src, src_x, src_y,
 			     omap_bo_width(src_bo), omap_bo_height(src_bo),
@@ -480,8 +482,8 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 			     omap_bo_width(dst_bo), omap_bo_height(dst_bo),
 			     omap_bo_pitch(dst_bo), omap_bo_Bpp(dst_bo));
 
-	omap_bo_cpu_fini(dst_bo, 0);
 	omap_bo_cpu_fini(src_bo, 0);
+	omap_bo_cpu_fini(dst_bo, 0);
 
 	return 0;
 }
