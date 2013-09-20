@@ -499,6 +499,10 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
 		return TRUE;
 
+	// wait for all flips to finish so we will read from the current buffer
+	while (pOMAP->pending_flips > 0)
+		drmmode_wait_for_event(pScrn);
+
 	/* Only copy if source is valid. */
 	for (i = 0; i < MAX_SCANOUTS; i++) {
 		scanout = &pOMAP->scanouts[i];
