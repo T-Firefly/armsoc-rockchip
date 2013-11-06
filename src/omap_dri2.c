@@ -479,7 +479,9 @@ OMAPDRI2SwapComplete(OMAPDRISwapCmd *cmd)
 	 */
 	pScreen->DestroyPixmap(cmd->pSrcPixmap);
 	pScreen->DestroyPixmap(cmd->pDstPixmap);
-	pOMAP->pending_flips--;
+	if (cmd->type != DRI2_BLIT_COMPLETE) {
+		pOMAP->pending_flips--;
+	}
 
 	free(cmd);
 }
@@ -578,7 +580,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	 */
 	cmd->pSrcPixmap->refcnt++;
 	cmd->pDstPixmap->refcnt++;
-	pOMAP->pending_flips++;
 
 	src_fb_id = omap_bo_get_fb(src_priv->bo);
 	dst_fb_id = omap_bo_get_fb(dst_priv->bo);
@@ -614,6 +615,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		cmd->type = DRI2_FLIP_COMPLETE;
 		/* TODO: handle rollback if only multiple CRTC flip is only partially successful
 		 */
+		pOMAP->pending_flips++;
 		ret = drmmode_page_flip(pDraw, src_fb_id, cmd, &num_flipped);
 
 		/* If using page flip events, we'll trigger an immediate completion in
