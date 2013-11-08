@@ -288,25 +288,21 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 	return ret;
 }
 
-int omap_bo_add_fb(struct omap_bo *bo)
+int omap_bo_get_fb(struct omap_bo *bo, uint32_t *fb_id)
 {
-	int ret;
-
-	assert(bo->fb_id == 0);
-
-	ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height, bo->depth,
-			bo->bpp, bo->pitch, bo->handle, &bo->fb_id);
-	if (ret < 0) {
-		xf86DrvMsg(-1, X_ERROR, "Could not add fb to bo %d", ret);
-		bo->fb_id = 0;
-		return ret;
+	int ret = 0;
+	if (!bo->fb_id) {
+		ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height,
+				bo->depth, bo->bpp, bo->pitch, bo->handle,
+				&bo->fb_id);
+		if (ret < 0) {
+			xf86DrvMsg(-1, X_ERROR, "Could not add fb to bo %d",
+				ret);
+			bo->fb_id = 0;
+		}
 	}
-	return 0;
-}
-
-uint32_t omap_bo_get_fb(struct omap_bo *bo)
-{
-	return bo->fb_id;
+	*fb_id = bo->fb_id;
+	return ret;
 }
 
 int omap_bo_clear(struct omap_bo *bo)

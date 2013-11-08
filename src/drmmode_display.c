@@ -331,9 +331,6 @@ drmmode_new_fb(OMAPPtr pOMAP, int width, int height, int depth, int bpp)
 	if (omap_bo_clear(bo))
 		goto err;
 
-	if (omap_bo_add_fb(bo))
-		goto err;
-
 	return bo;
 err:
 	omap_bo_unreference(bo);
@@ -350,8 +347,14 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	drmmode_output_private_ptr drmmode_output;
 	int ret, crtc_id, output_count, i;
 	uint32_t *output_ids = NULL;
+	uint32_t fb_id;
 	drmModeModeInfo kmode;
 
+	ret = omap_bo_get_fb(bo, &fb_id);
+	if (!fb_id) {
+		ERROR_MSG("Cannot set CRTC without fb id");
+		return ret;
+	}
 	output_ids = calloc(xf86_config->num_output, sizeof *output_ids);
 	assert(output_ids);
 
@@ -378,7 +381,7 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	drmmode_crtc = crtc->driver_private;
 	crtc_id = drmmode_crtc->mode_crtc->crtc_id;
 	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id,
-			omap_bo_get_fb(bo), x, y, output_ids, output_count,
+			fb_id, x, y, output_ids, output_count,
 			&kmode);
 	if (ret) {
 		ERROR_MSG("failed to set mode: %s", strerror(-ret));
@@ -656,29 +659,14 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	ScrnInfoPtr pScrn = crtc->scrn;
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
 	int saved_x, saved_y;
 	Rotation saved_rotation;
 	DisplayModeRec saved_mode;
 	int ret = TRUE;
 	int i;
-	uint32_t fb_id;
 
 	TRACE_ENTER();
-
-	fb_id = omap_bo_get_fb(pOMAP->scanout);
-	if (fb_id == 0) {
-
-		DEBUG_MSG("create framebuffer: %dx%d",
-				pScrn->virtualX, pScrn->virtualY);
-
-		ret = omap_bo_add_fb(pOMAP->scanout);
-		if (ret) {
-			ret = FALSE;
-			goto out;
-		}
-	}
 
 	/* Save the current mode in case there's a problem: */
 	saved_mode = crtc->mode;
@@ -736,7 +724,7 @@ done:
 		crtc->rotation = saved_rotation;
 		crtc->mode = saved_mode;
 	}
-out:
+
 	TRACE_EXIT();
 	return ret;
 }

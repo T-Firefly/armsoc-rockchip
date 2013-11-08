@@ -260,19 +260,6 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 		return NULL;
 	}
 
-	/* Q: how to know across OMAP generations what formats that the display
-	 * can support directly?
-	 * A: attempt to create a drm_framebuffer, and if that fails then the
-	 * hw must not support.. then fall back to blitting
-	 */
-	if (mayflip(pDraw, NULL) && attachment != DRI2BufferFrontLeft) {
-		int ret = omap_bo_add_fb(bo);
-		if (ret) {
-			/* to-bad, so-sad, we can't flip */
-			WARNING_MSG("could not create fb: %d", ret);
-		}
-	}
-
 	return DRIBUF(buf);
 }
 
@@ -510,7 +497,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPDRI2BufferPtr src = OMAPBUF(pSrcBuffer);
 	OMAPDRI2BufferPtr dst = OMAPBUF(pDstBuffer);
 	OMAPDRISwapCmd *cmd;
-	int src_fb_id, dst_fb_id;
+	uint32_t src_fb_id;
 	OMAPPixmapPrivPtr src_priv, dst_priv;
 	int new_canflip, ret, num_flipped;
 	RegionRec region;
@@ -581,9 +568,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	cmd->pSrcPixmap->refcnt++;
 	cmd->pDstPixmap->refcnt++;
 
-	src_fb_id = omap_bo_get_fb(src_priv->bo);
-	dst_fb_id = omap_bo_get_fb(dst_priv->bo);
-
 	if ((src->previous_canflip != -1 && src->previous_canflip != new_canflip) ||
 	    (dst->previous_canflip != -1 && dst->previous_canflip != new_canflip) ||
 	    (pOMAP->has_resized))
@@ -606,12 +590,16 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	src->previous_canflip = new_canflip;
 	dst->previous_canflip = new_canflip;
 
-	if (src_fb_id && dst_fb_id && new_canflip && !(pOMAP->has_resized)) {
+	omap_bo_get_fb(src_priv->bo, &src_fb_id);
+	/* ignore return code and just check for nonzero fb_id and decide
+	 * whether to blit or flip
+	 */
+	if (src_fb_id && new_canflip && !(pOMAP->has_resized)) {
 		/* has_resized: On hotplug the fb size and crtc sizes arent updated
 		* hence on this event we do a copyb but flip from the next frame
 		* when the sizes are updated.
 		*/
-		DEBUG_MSG("can flip:  %d -> %d", src_fb_id, dst_fb_id);
+		DEBUG_MSG("can flip:  %d", src_fb_id);
 		cmd->type = DRI2_FLIP_COMPLETE;
 		/* TODO: handle rollback if only multiple CRTC flip is only partially successful
 		 */
