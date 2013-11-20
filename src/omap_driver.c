@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -816,14 +817,14 @@ OMAPEnterVT(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int ret;
 
 	TRACE_ENTER();
 
-	ret = drmSetMaster(pOMAP->drmFD);
-	if (ret) {
-		ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
-		return FALSE;
+	if (geteuid() == 0) {
+		if (drmSetMaster(pOMAP->drmFD)) {
+			ERROR_MSG("Cannot get DRM master: %s", strerror(errno));
+			return FALSE;
+		}
 	}
 
 	if (!xf86SetDesiredModes(pScrn)) {
@@ -847,13 +848,13 @@ OMAPLeaveVT(VT_FUNC_ARGS_DECL)
 {
 	SCRN_INFO_PTR(arg);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int ret;
 
 	TRACE_ENTER();
 
-	ret = drmDropMaster(pOMAP->drmFD);
-	if (ret) {
-		WARNING_MSG("drmDropMaster failed: %s", strerror(errno));
+	if (geteuid() == 0) {
+		if (drmDropMaster(pOMAP->drmFD)) {
+			WARNING_MSG("drmDropMaster failed: %s", strerror(errno));
+		}
 	}
 
 	TRACE_EXIT();
