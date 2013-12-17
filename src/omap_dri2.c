@@ -501,6 +501,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPPixmapPrivPtr src_priv, dst_priv;
 	int new_canflip, ret, num_flipped;
 	RegionRec region;
+	struct omap_bo *old_bo;
 
 	cmd = calloc(1, sizeof *cmd);
 	if (!cmd)
@@ -532,10 +533,8 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	new_canflip = canflip(pDraw, src_priv->bo);
 
 	/* If we can flip using a crtc scanout, switch the front buffer bo */
+	old_bo = dst_priv->bo;
 	if (new_canflip && !pOMAP->has_resized) {
-		struct omap_bo *old_bo;
-
-		old_bo = dst_priv->bo;
 		dst_priv->bo = drmmode_scanout_from_drawable(pOMAP->scanouts,
 				pDraw)->bo;
 		omap_bo_reference(dst_priv->bo);
@@ -547,9 +546,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		}
 		omap_bo_unreference(old_bo);
 	} else {
-		struct omap_bo *old_bo;
-
-		old_bo = dst_priv->bo;
 		omap_bo_reference(pOMAP->scanout);
 		dst_priv->bo = pOMAP->scanout;
 		if (!drmmode_set_blit_mode(pScrn)) {
@@ -561,6 +557,10 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		omap_bo_unreference(old_bo);
 	}
 	DamageRegionProcessPending(&cmd->pDstPixmap->drawable);
+
+	/* If pDstPixmap's bo changed, also update the Pixmap pitch */
+	if (old_bo != dst_priv->bo)
+		cmd->pDstPixmap->devKind = omap_bo_pitch(dst_priv->bo);
 
 	/* obtain extra ref on pixmaps to avoid them going away while we await
 	 * the page flip event:
