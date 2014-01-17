@@ -661,6 +661,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	ScrnInfoPtr pScrn = crtc->scrn;
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
 	int saved_x, saved_y;
 	Rotation saved_rotation;
@@ -683,6 +684,15 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	crtc->rotation = rotation;
 
 	ret = xf86CrtcRotate(crtc);
+	if (!ret)
+		goto done;
+
+	// On a modeset, we should switch to blit mode to get a single scanout buffer
+	// and we will switch back to flip mode on the next flip request
+	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
+		ret = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x, crtc->y) == 0;
+	else
+		ret = drmmode_set_blit_mode(pScrn);
 	if (!ret)
 		goto done;
 
