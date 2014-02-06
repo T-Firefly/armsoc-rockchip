@@ -17,5 +17,3 @@ acceleration submodules is not stable yet.  This driver requires the
 omapdrm kernel driver w/ GEM support.
 
 EXA vs UXA?  This is an open question..
-
-
