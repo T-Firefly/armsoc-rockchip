@@ -629,12 +629,30 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 	visual = pScreen->visuals + pScreen->numVisuals;
 	while (--visual >= pScreen->visuals) {
 		if ((visual->class | DynamicClass) == DirectColor) {
+			unsigned widest_component;
+			unsigned red_width, green_width, blue_width;
+
 			visual->offsetRed = pScrn->offset.red;
 			visual->offsetGreen = pScrn->offset.green;
 			visual->offsetBlue = pScrn->offset.blue;
 			visual->redMask = pScrn->mask.red;
 			visual->greenMask = pScrn->mask.green;
 			visual->blueMask = pScrn->mask.blue;
+			/*
+			 * crbug.com/340790: Override default nplanes and
+			 * ColormapEntries computed by mi for our depth 32
+			 * xRGB888 visual.
+			 */
+			visual->nplanes = Ones(visual->redMask |
+					visual->greenMask | visual->blueMask);
+
+			/* find widest component */
+			red_width = Ones(visual->redMask);
+			green_width = Ones(visual->greenMask);
+			blue_width = Ones(visual->blueMask);
+			widest_component = max(red_width,
+					max(green_width, blue_width));
+			visual->ColormapEntries = 1 << widest_component;
 		}
 	}
 
@@ -702,6 +720,7 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 		goto fail;
 	}
 
+	/* The default xRGB888 visual uses 8 bits per component */
 	if (!xf86HandleColormaps(pScreen, 256, 8, OMAPLoadPalette, NULL,
 			CMAP_PALETTED_TRUECOLOR)) {
 		ERROR_MSG("xf86HandleColormaps() failed!");
