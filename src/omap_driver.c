@@ -562,9 +562,25 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 
 	TRACE_ENTER();
 
-	/* Allocate and map memory areas we need */
+	/* Allocate a bo for the root window pixmap */
 	if (!OMAPMapMem(pScrn))
 		return FALSE;
+
+	/* For a smooth transition from console to X, copy the current fbcon
+	 * contents to the root window.
+	 */
+	drmmode_copy_fb(pScrn);
+
+	/* The root window pixmap bo (pOMAP->scanout) has valid contents now,
+	 * so we start out claiming we're in blit mode.
+	 * The root window is displayed when we do:
+	 *   OMAPEnterVT() ->
+	 *    xf86SetDesiredModes() ->
+	 *     drmmode_set_mode_major() ->
+	 *      drmmode_set_crtc() ->
+	 *       drmModeSetCrtc()
+	 */
+	pOMAP->flip_mode = OMAP_FLIP_DISABLED;
 
 	xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
 
@@ -612,9 +628,6 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 		ERROR_MSG("Cannot initialize the pixmap depth!");
 		goto fail;
 	}
-
-	/* flip_mode is currently invalid */
-	pOMAP->flip_mode = OMAP_FLIP_INVALID;
 
 	/* Initialize some generic 2D drawing functions: */
 	if (!fbScreenInit(pScreen, omap_bo_map(pOMAP->scanout),
@@ -736,17 +749,6 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 	wrap(pOMAP, pScreen, CloseScreen, OMAPCloseScreen);
 
 	drmmode_screen_init(pScrn);
-
-	/* We need to copy the framebuffer into the screen before using it as
-	 * scanout as that will cause a moment of uninitialized framebuffer to
-	 * be drawn to the video out.
-	 */
-	drmmode_copy_fb(pScrn);
-
-	/* The main scanout buffer (pOMAP->scanout) has valid contents now, so
-	 * we start out claiming we're in blit mode.
-	 */
-	drmmode_set_blit_mode(pScrn);
 
 	TRACE_EXIT();
 	return TRUE;
