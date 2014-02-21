@@ -607,21 +607,19 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 	 */
 
 	miClearVisualTypes();
-	if (!miSetVisualTypes(pScrn->bitsPerPixel, miGetDefaultVisualMask(pScrn->depth),
+	if (!miSetVisualTypes(pScrn->depth, miGetDefaultVisualMask(pScrn->depth),
 			pScrn->rgbBits, pScrn->defaultVisual)) {
 		ERROR_MSG("Cannot initialize the visual type for %d bits per pixel!",
 				pScrn->bitsPerPixel);
 		goto fail;
 	}
 
-	if(pScrn->bitsPerPixel == 32 && pScrn->depth == 24) {
-		/* Also add a 24 bit depth visual */
-		if (!miSetVisualTypes(24, miGetDefaultVisualMask(pScrn->depth),
+	/* Also add a 32-bit depth XRGB8888 visual */
+	if (!miSetVisualTypes(32, miGetDefaultVisualMask(pScrn->depth),
 				pScrn->rgbBits, pScrn->defaultVisual)) {
-			WARNING_MSG("Cannot initialize a 24 depth visual for 32bpp");
-		}else{
-			INFO_MSG("Initialized a 24 depth visual for 32bpp");
-		}
+		WARNING_MSG("Cannot initialize a depth-32 visual");
+	} else {
+		INFO_MSG("Initialized a depth-32 visual for XRGB8888");
 	}
 
 	if (!miSetPixmapDepths()) {
