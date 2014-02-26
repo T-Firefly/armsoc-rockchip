@@ -66,9 +66,9 @@ XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
 XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 
 # Checks for pkg-config packages
-PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto fontsproto [libdrm >= 2.4.30] dri2proto $REQUIRED_MODULES)
+PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto fontsproto dri2proto $REQUIRED_MODULES)
 PKG_CHECK_MODULES(XEXT, [xextproto >= 7.0.99.1])
-
+PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libdrm_exynos >= 0.6])
 
 # Checks for header files.
 AC_HEADER_STDC

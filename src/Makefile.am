@@ -35,10 +35,10 @@ ERROR_CFLAGS = -Werror -Wall -Wdeclaration-after-statement -Wvla \
 	-Wold-style-definition -Winit-self -Wmissing-include-dirs \
 	-Waddress -Waggregate-return -Wno-multichar -Wnested-externs
  
-AM_CFLAGS = @XORG_CFLAGS@ $(ERROR_CFLAGS)
+AM_CFLAGS = @XORG_CFLAGS@ @DRM_CFLAGS@ $(ERROR_CFLAGS)
 armsoc_drv_la_LTLIBRARIES = armsoc_drv.la
 armsoc_drv_la_LDFLAGS = -module -avoid-version -no-undefined
-armsoc_drv_la_LIBADD = @XORG_LIBS@
+armsoc_drv_la_LIBADD = @XORG_LIBS@ @DRM_LIBS@
 armsoc_drv_ladir = @moduledir@/drivers
 
 armsoc_drv_la_SOURCES = \
