@@ -338,6 +338,17 @@ err:
 }
 
 static int
+drmmode_set_crtc_off(xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	int ret;
+	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd,
+			drmmode_crtc->mode_crtc->crtc_id, 0, 0, 0, NULL, 0,
+			NULL);
+	return ret;
+}
+
+static int
 drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 			int y)
 {
@@ -384,7 +395,8 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 			fb_id, x, y, output_ids, output_count,
 			&kmode);
 	if (ret) {
-		ERROR_MSG("failed to set mode: %s", strerror(-ret));
+		ERROR_MSG("crtc_id:%d failed to set mode: %s",
+			  crtc_id, strerror(-ret));
 		goto out;
 	}
 
@@ -529,6 +541,18 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 				crtc->y);
 		if (ret) {
 			ERROR_MSG("Set crtc to scanout failed");
+			drmmode_set_crtc_off(crtc);
+			/* try restoring other CRTCs to previous state*/
+			while (--i >= 0) {
+				crtc = xf86_config->crtc[i];
+				if (!crtc->enabled)
+					continue;
+				scanout = drmmode_scanout_from_crtc(
+						pOMAP->scanouts, crtc);
+				if (!scanout)
+					continue;
+				drmmode_set_crtc(pScrn, crtc, scanout->bo, 0, 0);
+			}
 			return FALSE;
 		}
 	}
@@ -579,6 +603,15 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 		ret = drmmode_set_crtc(pScrn, crtc, scanout->bo, 0, 0);
 		if (ret) {
 			ERROR_MSG("Set crtc to crtc scanout failed");
+			drmmode_set_crtc_off(crtc);
+			/* try to restoring other CRTCs to previous state*/
+			while (--i >= 0) {
+				crtc = xf86_config->crtc[i];
+				if (!crtc->enabled)
+					continue;
+				drmmode_set_crtc(pScrn, crtc, pOMAP->scanout,
+					crtc->x, crtc->y);
+			}
 			return FALSE;
 		}
 	}
@@ -736,7 +769,6 @@ done:
 		crtc->rotation = saved_rotation;
 		crtc->mode = saved_mode;
 	}
-
 	TRACE_EXIT();
 	return ret;
 }
@@ -1710,7 +1742,7 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
 				drmmode_crtc->mode_crtc->crtc_id, fb_id, flags,
 				priv);
 		if (ret) {
-			ERROR_MSG("flip queue failed: %s", strerror(errno));
+			ERROR_MSG("flip queue failed: %s crtc:%d", strerror(errno), i);
 			return ret;
 		}
 		(*num_flipped)++;

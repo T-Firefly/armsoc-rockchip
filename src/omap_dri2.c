@@ -541,11 +541,12 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 		omap_bo_reference(dst_priv->bo);
 		if (!drmmode_set_flip_mode(pScrn)) {
 			ERROR_MSG("Could not set flip mode");
+			new_canflip = FALSE;
 			omap_bo_unreference(dst_priv->bo);
-			DamageRegionProcessPending(&cmd->pDstPixmap->drawable);
-			return FALSE;
+			dst_priv->bo = old_bo;
+		} else {
+			omap_bo_unreference(old_bo);
 		}
-		omap_bo_unreference(old_bo);
 	} else {
 		struct omap_bo *old_bo;
 
