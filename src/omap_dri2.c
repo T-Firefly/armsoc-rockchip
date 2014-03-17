@@ -406,7 +406,6 @@ struct _OMAPDRISwapCmd {
 	DRI2SwapEventPtr func;
 	int swapCount;
 	int flags;
-	int crtc_id;
 	int x;
 	int y;
 	void *data;
