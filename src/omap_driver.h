@@ -57,6 +57,7 @@
 #include "dri2.h"
 
 #include "omap_dumb.h"
+#include "omap_msg.h"
 
 #include <errno.h>
 
@@ -75,43 +76,6 @@ enum OMAP_CHIPSET {
 /*#define OMAP_SUPPORT_GAMMA		1 -- Not supported on exynos*/
 
 #define MAX_SCANOUTS		3
-
-/**
- * This controls whether debug statements (and function "trace" enter/exit)
- * messages are sent to the log file (TRUE) or are ignored (FALSE).
- */
-extern _X_EXPORT Bool omapDebug;
-
-
-/* Various logging/debug macros for use in the X driver and the external
- * sub-modules:
- */
-#define TRACE_ENTER() \
-		do { if (omapDebug) xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s:%d: Entering\n",\
-				__FUNCTION__, __LINE__); } while (0)
-#define TRACE_EXIT() \
-		do { if (omapDebug) xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s:%d: Exiting\n",\
-				__FUNCTION__, __LINE__); } while (0)
-#define DEBUG_MSG(fmt, ...) \
-		do { if (omapDebug) xf86DrvMsg(pScrn->scrnIndex, X_INFO, "%s:%d " fmt "\n",\
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
-#define INFO_MSG(fmt, ...) \
-		do { xf86DrvMsg(pScrn->scrnIndex, X_INFO, fmt "\n",\
-				##__VA_ARGS__); } while (0)
-#define CONFIG_MSG(fmt, ...) \
-		do { xf86DrvMsg(pScrn->scrnIndex, X_CONFIG, fmt "\n",\
-				##__VA_ARGS__); } while (0)
-#define WARNING_MSG(fmt, ...) \
-		do { xf86DrvMsg(pScrn->scrnIndex, X_WARNING, "WARNING: " fmt "\n",\
-				##__VA_ARGS__); } while (0)
-#define ERROR_MSG(fmt, ...) \
-		do { xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "ERROR: " fmt "\n",\
-				##__VA_ARGS__); } while (0)
-#define EARLY_ERROR_MSG(fmt, ...) \
-		do { xf86Msg(X_ERROR, "ERROR: " fmt "\n",\
-				##__VA_ARGS__); } while (0)
-
-
 
 typedef struct _OMAPScanout
 {
