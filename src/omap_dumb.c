@@ -31,9 +31,11 @@
 #include <xf86drmMode.h>
 
 #include "omap_dumb.h"
+#include "omap_msg.h"
 
 struct omap_device {
 	int fd;
+	ScrnInfoPtr pScrn;
 };
 
 struct omap_bo {
@@ -78,13 +80,15 @@ struct drm_exynos_gem_cpu_release {
 /* device related functions:
  */
 
-struct omap_device *omap_device_new(int fd)
+struct omap_device *omap_device_new(int fd, ScrnInfoPtr pScrn)
 {
 	struct omap_device *new_dev = calloc(1, sizeof *new_dev);
 	if (!new_dev)
 		return NULL;
 
 	new_dev->fd = fd;
+	new_dev->pScrn = pScrn;
+
 	return new_dev;
 }
 
@@ -100,6 +104,7 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 			uint32_t width, uint32_t height, uint8_t depth,
 			uint8_t bpp, uint32_t flags)
 {
+	ScrnInfoPtr pScrn = dev->pScrn;
 	struct drm_mode_create_dumb create_dumb;
 	struct omap_bo *new_buf;
 	int res;
@@ -117,9 +122,8 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 	if (res)
 	{
 		free(new_buf);
-		xf86DrvMsg(-1, X_ERROR, "_CREATE_DUMB("
-				"{height: 0x%X, width: 0x%X, bpp: 0x%X, flags: 0x%X}) "
-				"failed. errno:0x%X\n",height,width,bpp,flags,errno);
+		ERROR_MSG("CREATE_DUMB(%ux%u bpp: %u flags: 0x%x) failed: %s",
+				height, width, bpp, flags, strerror(errno));
 		return NULL;
 	}
 
@@ -188,14 +192,16 @@ void omap_bo_reference(struct omap_bo *bo)
 
 int omap_bo_get_name(struct omap_bo *bo, uint32_t *name)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
+
 	if (bo->name == 0) {
 		struct drm_gem_flink flink;
 		int res;
 		flink.handle = bo->handle;
 		res = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &flink);
 		if (res) {
-			xf86DrvMsg(-1, X_ERROR, "_GEM_FLINK("
-			    "handle: 0x%X) failed. errno:0x%X\n", flink.handle, errno);
+			ERROR_MSG("[BO:%u] GEM_FLINK failed: %s",
+					bo->handle, strerror(errno));
 		} else {
 			bo->name = flink.name;
 		}
@@ -242,6 +248,8 @@ uint32_t omap_bo_depth(struct omap_bo *bo)
 
 void *omap_bo_map(struct omap_bo *bo)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
+
 	if (!bo->map_addr)
 	{
 		struct drm_mode_map_dumb map_dumb;
@@ -250,14 +258,17 @@ void *omap_bo_map(struct omap_bo *bo)
 		map_dumb.handle = bo->handle;
 
 		res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
-		if (res)
+		if (res) {
+			ERROR_MSG("[BO:%u] MODE_MAP_DUMB failed: %s",
+					bo->handle, strerror(errno));
 			return NULL;
+		}
 
 		bo->map_addr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE,
 				MAP_SHARED, bo->dev->fd, map_dumb.offset);
 		if (bo->map_addr == MAP_FAILED) {
-			xf86DrvMsg(-1, X_ERROR, "mmap bo failed: %s\n",
-					strerror(errno));
+			ERROR_MSG("[BO:%u] mmap bo failed: %s",
+					bo->handle, strerror(errno));
 			bo->map_addr = NULL;
 		}
 	}
@@ -267,13 +278,13 @@ void *omap_bo_map(struct omap_bo *bo)
 
 int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
 	struct drm_exynos_gem_cpu_acquire acquire;
 	int ret;
 
 	if (bo->acquire_cnt) {
-		if (op & OMAP_GEM_WRITE
-			&& !bo->acquired_exclusive) {
-			xf86DrvMsg(-1, X_ERROR, "attempting to acquire read locked surface for write");
+		if ((op & OMAP_GEM_WRITE) && !bo->acquired_exclusive) {
+			ERROR_MSG("attempting to acquire read locked surface for write");
 			return 1;
 		}
 		bo->acquire_cnt++;
@@ -287,12 +298,14 @@ int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 		: DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED;
 	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE, &acquire);
 	if (ret)
-		xf86DrvMsg(-1, X_ERROR, "DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE failed: %d", ret);
+		ERROR_MSG("DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE failed: %s",
+				strerror(errno));
 	return ret;
 }
 
 int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
 	struct drm_exynos_gem_cpu_release release;
 	int ret;
 
@@ -304,20 +317,25 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 	release.handle = bo->handle;
 	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE, &release);
 	if (ret)
-		xf86DrvMsg(-1, X_ERROR, "DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE failed: %d", ret);
+		ERROR_MSG("DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE failed: %s",
+				strerror(errno));
 	return ret;
 }
 
 int omap_bo_get_fb(struct omap_bo *bo, uint32_t *fb_id)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
 	int ret = 0;
+
 	if (!bo->fb_id) {
 		ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height,
 				bo->depth, bo->bpp, bo->pitch, bo->handle,
 				&bo->fb_id);
 		if (ret < 0) {
-			xf86DrvMsg(-1, X_ERROR, "Could not add fb to bo %d",
-				ret);
+			ERROR_MSG("[BO:%u] add FB (%ux%u pitch:%u bpp:%u depth:%u) failed: %s",
+					bo->handle, bo->width, bo->height,
+					bo->pitch, bo->bpp, bo->depth,
+					strerror(errno));
 			bo->fb_id = 0;
 		}
 	}
@@ -327,11 +345,11 @@ int omap_bo_get_fb(struct omap_bo *bo, uint32_t *fb_id)
 
 int omap_bo_clear(struct omap_bo *bo)
 {
+	ScrnInfoPtr pScrn = bo->dev->pScrn;
 	unsigned char *dst;
 
 	if (!(dst = omap_bo_map(bo))) {
-		xf86DrvMsg(-1, X_ERROR,
-				"Couldn't map scanout bo\n");
+		ERROR_MSG("[BO:%u] Could not map scanout\n", bo->handle);
 		return -1;
 	}
 	memset(dst, 0x0, bo->pitch * bo->height);

@@ -475,7 +475,7 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 	DEBUG_MSG("Became DRM master.");
 
 	/* create DRM device instance: */
-	pOMAP->dev = omap_device_new(pOMAP->drmFD);
+	pOMAP->dev = omap_device_new(pOMAP->drmFD, pScrn);
 
 	pScrn->chipset = (char *)xf86TokenToString(OMAPChipsets,
 			OMAP_CHIPSET_EXYNOS5);

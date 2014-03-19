@@ -38,7 +38,7 @@ enum omap_gem_op {
 	OMAP_GEM_WRITE = 0x02,
 };
 
-struct omap_device *omap_device_new(int fd);
+struct omap_device *omap_device_new(int fd, ScrnInfoPtr pScrn);
 void omap_device_del(struct omap_device *dev);
 int omap_bo_get_name(struct omap_bo *bo, uint32_t *name);
 uint32_t omap_bo_handle(struct omap_bo *bo);
