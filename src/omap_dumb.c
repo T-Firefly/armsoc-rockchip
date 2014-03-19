@@ -203,24 +203,25 @@ void omap_bo_reference(struct omap_bo *bo)
 	bo->refcnt++;
 }
 
-int omap_bo_get_name(struct omap_bo *bo, uint32_t *name)
+uint32_t omap_bo_get_name(struct omap_bo *bo)
 {
 	ScrnInfoPtr pScrn = bo->dev->pScrn;
+	struct drm_gem_flink flink;
+	int ret;
 
-	if (bo->name == 0) {
-		struct drm_gem_flink flink;
-		int res;
-		flink.handle = bo->handle;
-		res = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &flink);
-		if (res) {
-			ERROR_MSG("[BO:%u] GEM_FLINK failed: %s",
-					bo->handle, strerror(errno));
-		} else {
-			bo->name = flink.name;
-		}
+	if (bo->name)
+		return bo->name;
+
+	flink.handle = bo->handle;
+	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &flink);
+	if (ret) {
+		ERROR_MSG("[BO:%u] GEM_FLINK failed: %s",
+				bo->handle, strerror(errno));
+		return 0;
 	}
-	*name = bo->name;
-	return 0;
+
+	bo->name = flink.name;
+	return bo->name;
 }
 
 uint32_t omap_bo_handle(struct omap_bo *bo)
@@ -262,30 +263,31 @@ uint32_t omap_bo_depth(struct omap_bo *bo)
 void *omap_bo_map(struct omap_bo *bo)
 {
 	ScrnInfoPtr pScrn = bo->dev->pScrn;
+	struct drm_mode_map_dumb map_dumb;
+	int res;
+	void *map_addr;
 
-	if (!bo->map_addr)
-	{
-		struct drm_mode_map_dumb map_dumb;
-		int res;
+	if (bo->map_addr)
+		return bo->map_addr;
 
-		map_dumb.handle = bo->handle;
+	map_dumb.handle = bo->handle;
 
-		res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
-		if (res) {
-			ERROR_MSG("[BO:%u] MODE_MAP_DUMB failed: %s",
-					bo->handle, strerror(errno));
-			return NULL;
-		}
-
-		bo->map_addr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE,
-				MAP_SHARED, bo->dev->fd, map_dumb.offset);
-		if (bo->map_addr == MAP_FAILED) {
-			ERROR_MSG("[BO:%u] mmap bo failed: %s",
-					bo->handle, strerror(errno));
-			bo->map_addr = NULL;
-		}
+	res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_MAP_DUMB, &map_dumb);
+	if (res) {
+		ERROR_MSG("[BO:%u] MODE_MAP_DUMB failed: %s",
+				bo->handle, strerror(errno));
+		return NULL;
 	}
 
+	map_addr = mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
+			bo->dev->fd, map_dumb.offset);
+	if (map_addr == MAP_FAILED) {
+		ERROR_MSG("[BO:%u] mmap bo failed: %s",
+				bo->handle, strerror(errno));
+		return NULL;
+	}
+
+	bo->map_addr = map_addr;
 	return bo->map_addr;
 }
 
@@ -335,25 +337,26 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 	return ret;
 }
 
-int omap_bo_get_fb(struct omap_bo *bo, uint32_t *fb_id)
+uint32_t omap_bo_get_fb(struct omap_bo *bo)
 {
 	ScrnInfoPtr pScrn = bo->dev->pScrn;
-	int ret = 0;
+	int ret;
+	uint32_t fb_id;
 
-	if (!bo->fb_id) {
-		ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height,
-				bo->depth, bo->bpp, bo->pitch, bo->handle,
-				&bo->fb_id);
-		if (ret < 0) {
-			ERROR_MSG("[BO:%u] add FB (%ux%u pitch:%u bpp:%u depth:%u) failed: %s",
-					bo->handle, bo->width, bo->height,
-					bo->pitch, bo->bpp, bo->depth,
-					strerror(errno));
-			bo->fb_id = 0;
-		}
+	if (bo->fb_id)
+		return bo->fb_id;
+
+	ret = drmModeAddFB(bo->dev->fd, bo->width, bo->height, bo->depth,
+			bo->bpp, bo->pitch, bo->handle, &fb_id);
+	if (ret < 0) {
+		ERROR_MSG("[BO:%u] add FB (%ux%u pitch:%u bpp:%u depth:%u) failed: %s",
+				bo->handle, bo->width, bo->height, bo->pitch,
+				bo->bpp, bo->depth, strerror(errno));
+		return 0;
 	}
-	*fb_id = bo->fb_id;
-	return ret;
+
+	bo->fb_id = fb_id;
+	return bo->fb_id;
 }
 
 int omap_bo_clear(struct omap_bo *bo)

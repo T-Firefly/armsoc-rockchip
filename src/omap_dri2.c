@@ -212,7 +212,6 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	OMAPDRI2BufferPtr buf;
 	PixmapPtr pPixmap;
 	struct omap_bo *bo;
-	int ret;
 
 	DEBUG_MSG("pDraw=%p, attachment=%d, format=%08x",
 			pDraw, attachment, format);
@@ -253,9 +252,9 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	buf->pPixmap = pPixmap;
 	buf->previous_canflip = -1;
 
-	ret = omap_bo_get_name(bo, &DRIBUF(buf)->name);
-	if (ret) {
-		ERROR_MSG("could not get buffer name: %d", ret);
+	DRIBUF(buf)->name = omap_bo_get_name(bo);
+	if (!DRIBUF(buf)->name) {
+		ERROR_MSG("could not get global buffer name");
 		/* TODO cleanup */
 		return NULL;
 	}
@@ -590,7 +589,7 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	src->previous_canflip = new_canflip;
 	dst->previous_canflip = new_canflip;
 
-	omap_bo_get_fb(src_priv->bo, &src_fb_id);
+	src_fb_id = omap_bo_get_fb(src_priv->bo);
 	/* ignore return code and just check for nonzero fb_id and decide
 	 * whether to blit or flip
 	 */
@@ -684,8 +683,10 @@ static void
 OMAPDRI2ReuseBufferNotify(DrawablePtr pDraw, DRI2BufferPtr buffer)
 {
 	OMAPDRI2BufferPtr omap_buffer = OMAPBUF(buffer);
-	OMAPPixmapPrivPtr omap_priv = exaGetPixmapDriverPrivate(omap_buffer->pPixmap);
-	omap_bo_get_name(omap_priv->bo, &buffer->name);
+	PixmapPtr pPixmap = omap_buffer->pPixmap;
+	OMAPPixmapPrivPtr omap_priv = exaGetPixmapDriverPrivate(pPixmap);
+
+	buffer->name = omap_bo_get_name(omap_priv->bo);
 }
 
 /**

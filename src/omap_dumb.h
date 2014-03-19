@@ -40,11 +40,13 @@ enum omap_gem_op {
 
 struct omap_device *omap_device_new(int fd, ScrnInfoPtr pScrn);
 void omap_device_del(struct omap_device *dev);
-int omap_bo_get_name(struct omap_bo *bo, uint32_t *name);
+
+/* Getters with side-effects all return 0 (or NULL) on failure */
+uint32_t omap_bo_get_name(struct omap_bo *bo);
 uint32_t omap_bo_handle(struct omap_bo *bo);
 void *omap_bo_map(struct omap_bo *bo);
-int omap_get_param(struct omap_device *dev, uint64_t param, uint64_t *value);
-int omap_bo_get_fb(struct omap_bo *bo, uint32_t *fb_id);
+uint32_t omap_bo_get_fb(struct omap_bo *bo);
+
 int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op);
 int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op);
 

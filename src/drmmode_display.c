@@ -361,10 +361,10 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	uint32_t fb_id;
 	drmModeModeInfo kmode;
 
-	ret = omap_bo_get_fb(bo, &fb_id);
+	fb_id = omap_bo_get_fb(bo);
 	if (!fb_id) {
 		ERROR_MSG("Cannot set CRTC without fb id");
-		return ret;
+		return -EFAULT;
 	}
 	output_ids = calloc(xf86_config->num_output, sizeof *output_ids);
 	assert(output_ids);
