@@ -723,25 +723,10 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	ScrnInfoPtr pScrn = crtc->scrn;
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
-	int saved_x, saved_y;
-	Rotation saved_rotation;
-	DisplayModeRec saved_mode;
-	int ret = TRUE;
+	int ret;
 	int i;
 
 	TRACE_ENTER();
-
-	/* Save the current mode in case there's a problem: */
-	saved_mode = crtc->mode;
-	saved_x = crtc->x;
-	saved_y = crtc->y;
-	saved_rotation = crtc->rotation;
-
-	/* Set the new mode: */
-	crtc->mode = *mode;
-	crtc->x = x;
-	crtc->y = y;
-	crtc->rotation = rotation;
 
 	ret = xf86CrtcRotate(crtc);
 	if (!ret)
@@ -787,15 +772,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	if (drmmode->cursor)
 		xf86_reload_cursors(pScrn->pScreen);
 
-	ret = TRUE;
 done:
-	if (!ret) {
-		/* If there was a problem, restore the old mode: */
-		crtc->x = saved_x;
-		crtc->y = saved_y;
-		crtc->rotation = saved_rotation;
-		crtc->mode = saved_mode;
-	}
 	TRACE_EXIT();
 	return ret;
 }
@@ -1712,11 +1689,19 @@ drmmode_adjust_frame(ScrnInfoPtr pScrn, int x, int y)
 	xf86CrtcConfigPtr config = XF86_CRTC_CONFIG_PTR(pScrn);
 	xf86OutputPtr output = config->output[config->compat_output];
 	xf86CrtcPtr crtc = output->crtc;
+	int saved_x, saved_y;
+	Bool ret;
 
 	if (!crtc || !crtc->enabled)
 		return;
 
-	drmmode_set_mode_major(crtc, &crtc->mode, crtc->rotation, x, y);
+	saved_x = crtc->x;
+	saved_y = crtc->y;
+	ret = drmmode_set_mode_major(crtc, &crtc->mode, crtc->rotation, x, y);
+	if (!ret) {
+		crtc->x = saved_x;
+		crtc->y = saved_y;
+	}
 }
 
 /*
