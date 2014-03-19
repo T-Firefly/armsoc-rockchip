@@ -143,6 +143,11 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 	new_buf->acquired_exclusive = 0;
 	new_buf->acquire_cnt = 0;
 
+	DEBUG_MSG("[BO:%u] Created (%dx%d bpp: %u flags: 0x%x) => pitch: %u size: %llu",
+			create_dumb.handle, create_dumb.width,
+			create_dumb.height, create_dumb.bpp, create_dumb.flags,
+			create_dumb.pitch, create_dumb.size);
+
 	return new_buf;
 }
 
@@ -156,6 +161,10 @@ static void omap_bo_del(struct omap_bo *bo)
 		return;
 
 	pScrn = bo->dev->pScrn;
+
+	DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p size: %u",
+			bo->handle, bo->fb_id, bo->name, bo->map_addr,
+			bo->size);
 
 	if (bo->map_addr)
 	{
@@ -221,6 +230,9 @@ uint32_t omap_bo_get_name(struct omap_bo *bo)
 	}
 
 	bo->name = flink.name;
+	DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p",
+			bo->handle, bo->fb_id, bo->name, bo->map_addr);
+
 	return bo->name;
 }
 
@@ -288,6 +300,10 @@ void *omap_bo_map(struct omap_bo *bo)
 	}
 
 	bo->map_addr = map_addr;
+	DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p mapped %u bytes",
+			bo->handle, bo->fb_id, bo->name, bo->map_addr,
+			bo->size);
+
 	return bo->map_addr;
 }
 
@@ -356,6 +372,10 @@ uint32_t omap_bo_get_fb(struct omap_bo *bo)
 	}
 
 	bo->fb_id = fb_id;
+	DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p Added FB: %ux%u depth: %u bpp: %u pitch: %u",
+			bo->handle, bo->fb_id, bo->name, bo->map_addr,
+			bo->width, bo->height, bo->depth, bo->bpp, bo->pitch);
+
 	return bo->fb_id;
 }
 
