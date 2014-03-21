@@ -148,25 +148,38 @@ struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 
 static void omap_bo_del(struct omap_bo *bo)
 {
+	ScrnInfoPtr pScrn;
 	int res;
 	struct drm_mode_destroy_dumb destroy_dumb;
 
 	if (!bo)
 		return;
 
+	pScrn = bo->dev->pScrn;
+
 	if (bo->map_addr)
 	{
-		munmap(bo->map_addr, bo->size);
+		res = munmap(bo->map_addr, bo->size);
+		if (res)
+			ERROR_MSG("[BO:%u] munmap(%u) failed: %s",
+					bo->handle, bo->size, strerror(errno));
+		assert(res == 0);
 	}
 
 	if (bo->fb_id)
 	{
 		res = drmModeRmFB(bo->dev->fd, bo->fb_id);
+		if (res)
+			ERROR_MSG("[BO:%u] Remove [FB:%u] failed: %s",
+					bo->handle, bo->fb_id, strerror(errno));
 		assert(res == 0);
 	}
 
 	destroy_dumb.handle = bo->handle;
 	res = drmIoctl(bo->dev->fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy_dumb);
+	if (res)
+		ERROR_MSG("[BO:%u] DESTROY_DUMB failed: %s",
+				bo->handle, strerror(errno));
 	assert(res == 0);
 	free(bo);
 
