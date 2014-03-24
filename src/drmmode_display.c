@@ -545,6 +545,40 @@ static Bool drmmode_set_flip_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc)
 	return TRUE;
 }
 
+Bool drmmode_update_scanout_from_crtcs(ScrnInfoPtr pScrn)
+{
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	int ret, i;
+	Bool res;
+
+	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
+		return TRUE;
+
+	TRACE_ENTER();
+
+	/* Only copy if source is valid. */
+	for (i = 0; i < MAX_SCANOUTS; i++) {
+		OMAPScanoutPtr scanout = &pOMAP->scanouts[i];
+
+		if (!scanout->bo)
+			continue;
+		if (!scanout->valid)
+			continue;
+
+		ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
+					  scanout->y, pOMAP->scanout, 0, 0);
+		if (ret) {
+			ERROR_MSG("Copy crtc to scanout failed");
+			res = FALSE;
+			goto out;
+		}
+	}
+	res = TRUE;
+out:
+	TRACE_EXIT();
+	return res;
+}
+
 Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);

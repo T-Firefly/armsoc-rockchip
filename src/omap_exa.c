@@ -216,6 +216,38 @@ exa_index_to_string(int index)
 }
 
 /**
+ * Returns TRUE if the bo backing a pixmap has the same dimensions as the
+ * pixmap's drawable, and the same pitch as the pixmap.
+ *
+ * The backing bo for the root window pixmap is the root scanout
+ * (pOMAP->scanout).  The dimensions of the root window and its scanout are the
+ * same.
+ *
+ * The pixmap for un-redirected windows is also the root window pixmap.
+ *
+ * When swapping DRI2 buffers for a full-crtc un-clipped window, we enable
+ * "flip" mode, which switches the window's pixmap's backing bo from the root
+ * scanout to a per-crtc scanout.  When the root window only spans a single
+ * CRTC, then the per-crtc scanout dimensions match the root scanout, and this
+ * function returns TRUE.
+ *
+ * However, if the root window spans multiple CRTCs, then its dimensions will
+ * differ from the per-crtc scanout and this function returns FALSE.
+ */
+static Bool has_fullsize_bo(PixmapPtr pPixmap, struct omap_bo *bo)
+{
+	DrawablePtr pDraw = &pPixmap->drawable;
+
+	if (!bo)
+		return FALSE;
+
+	return (omap_bo_width(bo) == pDraw->width &&
+		omap_bo_height(bo) == pDraw->height &&
+		omap_bo_bpp(bo) == pDraw->bitsPerPixel &&
+		omap_bo_pitch(bo) == pPixmap->devKind);
+}
+
+/**
  * PrepareAccess() is called before CPU access to an offscreen pixmap.
  *
  * @param pPix the pixmap being accessed
@@ -263,27 +295,62 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	if (!priv->bo)
 		goto out;
 
-	/* If this is one of our scanouts, give back the main scanout.
-	 * We don't want 2D acceleration to ever touch the per-crtc
-	 * scanouts.
-	 */
 	for (i = 0; i < MAX_SCANOUTS; i++) {
-		if (pOMAP->scanouts[i].bo == priv->bo) {
-			/* If we're in per-crtc flip mode (ie: not using the scanout
-			 * buffer), make sure we enter blit mode before access. This
-			 * function copies the crtc scanouts back to the One True scanout
-			 * buffer.
+		/* Check if Pixmap is currently backed by one of our per-crtc
+		 * scanouts.  If so, then we are in flip mode, and this is the
+		 * pixmap of a full-CRTC Window.
+		 */
+		if (pOMAP->scanouts[i].bo != priv->bo)
+			continue;
+
+		if (op & OMAP_GEM_WRITE) {
+			/* For write access:
+			 * switch to blit mode, which first copies all per-crtc
+			 * scanouts to the root scanout, and give back the
+			 * root scanout.
 			 */
 			if (!drmmode_set_blit_mode(pScrn))
 				goto out;
-			/* If we're going to write to the One True scanout buffer, the
-			 * per-crtc scanout buffer should be invalidated.
+			/* Invalidate this per-crtc scanout to ensure it is
+			 * updated when switching back to flip mode.
 			 */
-			if (op & OMAP_GEM_WRITE)
-				pOMAP->scanouts[i].valid = FALSE;
+			pOMAP->scanouts[i].valid = FALSE;
 			pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
 			break;
 		}
+
+		/* For read access: */
+		if (has_fullsize_bo(pPixmap, priv->bo)) {
+			/* If the pixmap and its backing bo have the same
+			 * dimensions, give back the current bo.
+			 *  - In blit mode, this is the root scanout.
+			 *  - In flip mode, this is a per-crtc scanout.
+			 * This is an optimization for the common single-crtc
+			 * case.
+			 */
+			pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+			break;
+		}
+
+		/* If the pixmap and its backing bo have different dimensions,
+		 * it means we are in flip mode with multiple CRTCs scanning
+		 * out from per-crtc scanouts.
+		 * In this case, we cannot give back the per-crtc scanout
+		 * because its pitch does not match the pixmap's devKind.
+		 *
+		 * Our only recourse is to update the root scanout from the
+		 * crtc scanouts, and give back the root scanout.
+		 *
+		 * Grabbing a read lock on the per-crtc scanout will ensure
+		 * its contents are not updated (e.g. by the GPU) during this
+		 * access.
+		 */
+		if (!drmmode_update_scanout_from_crtcs(pScrn)) {
+			res = FALSE;
+			goto out;
+		}
+		pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
+		break;
 	}
 	if (i == MAX_SCANOUTS) {
 		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
@@ -292,12 +359,11 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	if (!pPixmap->devPrivate.ptr)
 		goto out;
 
-	/* wait for blits complete.. note we could be a bit more clever here
-	 * for non-DRI2 buffers and use separate OMAP{Prepare,Finish}GPUAccess()
-	 * fxns wrapping accelerated GPU operations.. this way we don't have
-	 * to prep/fini around each CPU operation, but only when there is an
-	 * intervening GPU operation (or if we go to a stronger op mask, ie.
-	 * first CPU access is READ and second is WRITE).
+	/* If this bo is exported as a dma_buf (ie it is a back buffer shared
+	 * via DRI2 with the mali driver), grab a read lock on it.  This will
+	 * keep mali from writing to it, even after the kernel has released its
+	 * own read lock following the page flip away from this scanout to a
+	 * new scanout buffer.
 	 */
 	if (omap_bo_cpu_prep(priv->bo, op))
 		goto out;

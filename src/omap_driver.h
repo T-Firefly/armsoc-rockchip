@@ -197,6 +197,7 @@ int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw);
 int drmmode_crtc_index_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw);
 Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn);
 Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn);
+Bool drmmode_update_scanout_from_crtcs(ScrnInfoPtr pScrn);
 
 
 /**
