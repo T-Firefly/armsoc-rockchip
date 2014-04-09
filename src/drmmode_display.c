@@ -579,6 +579,15 @@ out:
 	return res;
 }
 
+/*
+ * Enter blit mode.
+ *
+ * First, wait for all pending flips to complete.
+ * Next, copy all valid per-crtc bo contents to the root bo, and mark their
+ * scanouts as invalid to ensure they get updated when switching back to flip
+ * mode.
+ * Lastly, set all enabled crtcs to scan out from the root bo.
+ */
 Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
@@ -607,6 +616,7 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 			ERROR_MSG("Copy crtc to scanout failed");
 			return FALSE;
 		}
+		scanout->valid = FALSE;
 	}
 	for (i = 0; i < xf86_config->num_crtc; i++) {
 		xf86CrtcPtr crtc = xf86_config->crtc[i];
@@ -630,6 +640,13 @@ unwind:
 	return FALSE;
 }
 
+/*
+ * Enter flip mode.
+ *
+ * First, copy contents from the root bo to each invalid per-crtc bo, and mark
+ * its scanout as valid.
+ * Lastly, set all enabled crtcs to scan out from their per-crtc bos.
+ */
 Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);

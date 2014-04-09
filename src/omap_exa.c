@@ -283,11 +283,12 @@ static Bool has_fullsize_bo(PixmapPtr pPixmap, struct omap_bo *bo)
 _X_EXPORT Bool
 OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 {
+	ScreenPtr pScreen = pPixmap->drawable.pScreen;
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	PixmapPtr rootPixmap;
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 	const enum omap_gem_op op = idx2op(index);
-	int i;
 	Bool res = FALSE;
 
 	TRACE_ENTER();
@@ -295,65 +296,73 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 	if (!priv->bo)
 		goto out;
 
-	for (i = 0; i < MAX_SCANOUTS; i++) {
-		/* Check if Pixmap is currently backed by one of our per-crtc
-		 * scanouts.  If so, then we are in flip mode, and this is the
-		 * pixmap of a full-CRTC Window.
+	/* The root pixmap requires special handling.
+	 *
+	 * For writes, we never give access to the per-crtc bos, all writes
+	 * must be handled in blit mode.
+	 *
+	 * For reads, since 2-D may access any pixels of the root pixmap we
+	 * must ensure the bo we give back has the the same dimensions
+	 * (and pitch).  In flip mode, the root pixmap's current backing bo
+	 * will be a per-crtc bo.
+	 *
+	 * When using just a single CRTC, this bo will
+	 * have the same dimensions as the root pixmap and we can provide
+	 * direct read access to it.
+	 *
+	 * When using multiple CRTCs, the current per-crtc bo will have
+	 * different dimensions than the root pixmap, so we have to give back
+	 * the root pixmap after first updating its contents from all per-crtc
+	 * bos.
+	 *
+	 * In all cases, we grab a lock on the per-crtc bo to hold off any
+	 * updates until this read access has completed.
+	 */
+	rootPixmap = pScreen->GetScreenPixmap(pScreen);
+	if (pPixmap != rootPixmap || priv->bo == pOMAP->scanout) {
+		/* If not the root pixmap, or if the root pixmap is already
+		 * backed by the root bo, just give access to the pixmap's
+		 * current bo.
 		 */
-		if (pOMAP->scanouts[i].bo != priv->bo)
-			continue;
-
-		if (op & OMAP_GEM_WRITE) {
-			/* For write access:
-			 * switch to blit mode, which first copies all per-crtc
-			 * scanouts to the root scanout, and give back the
-			 * root scanout.
-			 */
-			if (!drmmode_set_blit_mode(pScrn))
-				goto out;
-			/* Invalidate this per-crtc scanout to ensure it is
-			 * updated when switching back to flip mode.
-			 */
-			pOMAP->scanouts[i].valid = FALSE;
-			pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
-			break;
-		}
-
-		/* For read access: */
-		if (has_fullsize_bo(pPixmap, priv->bo)) {
-			/* If the pixmap and its backing bo have the same
-			 * dimensions, give back the current bo.
-			 *  - In blit mode, this is the root scanout.
-			 *  - In flip mode, this is a per-crtc scanout.
-			 * This is an optimization for the common single-crtc
-			 * case.
-			 */
-			pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
-			break;
-		}
-
-		/* If the pixmap and its backing bo have different dimensions,
-		 * it means we are in flip mode with multiple CRTCs scanning
-		 * out from per-crtc scanouts.
-		 * In this case, we cannot give back the per-crtc scanout
-		 * because its pitch does not match the pixmap's devKind.
+		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+	} else if (op & OMAP_GEM_WRITE) {
+		/* For root pixmap write access:
+		 * First, switch to blit mode, which copies all valid per-crtc
+		 * bo contents to the root bo.
+		 * Then, switch the root pixmap's backing bo to the root bo.
+		 * Finally, give back the root bo.
+		 */
+		if (!drmmode_set_blit_mode(pScrn))
+			goto out;
+		omap_bo_reference(pOMAP->scanout);
+		omap_bo_unreference(priv->bo);
+		priv->bo = pOMAP->scanout;
+		pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
+	} else if (!has_fullsize_bo(pPixmap, priv->bo)) {
+		/* For root pixmap read access:
+		 * If current per-crtc bo has the same dimensions as the root
+		 * pixmap, it is safe to allow direct read access to it.
+		 * This is an optimization to allow staying in flip mode when
+		 * providing 2-D read access in the common single-crtc case.
+		 */
+		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
+	} else {
+		/* For root pixmap read access:
+		 * If current per-crtc bo has different dimensions than the
+		 * pixmap we cannot give back the per-crtc bo because its pitch
+		 * does not match the pixmap's devKind.
 		 *
-		 * Our only recourse is to update the root scanout from the
-		 * crtc scanouts, and give back the root scanout.
+		 * Our only recourse is to update the root bo from the per-crtc
+		 * bos, and give back the root bo.
 		 *
-		 * Grabbing a read lock on the per-crtc scanout will ensure
-		 * its contents are not updated (e.g. by the GPU) during this
-		 * access.
+		 * Grabbing a read lock on the per-crtc bo ensures its contents
+		 * are not updated (e.g. by the GPU) during this 2-D read.
 		 */
 		if (!drmmode_update_scanout_from_crtcs(pScrn)) {
 			res = FALSE;
 			goto out;
 		}
 		pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
-		break;
-	}
-	if (i == MAX_SCANOUTS) {
-		pPixmap->devPrivate.ptr = omap_bo_map(priv->bo);
 	}
 
 	if (!pPixmap->devPrivate.ptr)
