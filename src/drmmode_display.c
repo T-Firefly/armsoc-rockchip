@@ -1775,8 +1775,21 @@ drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
 	for (i = 0; i < xf86_config->num_crtc; i++) {
 		xf86CrtcPtr crtc = xf86_config->crtc[i];
 		uint32_t crtc_id = drmmode_crtc_id(crtc);
+		Bool connected = FALSE;
+		int j;
 
 		if (!crtc->enabled)
+			continue;
+		/* crtc can be enabled but all the outputs disabled, which
+		   will cause flip to fail with EBUSY, so don't even try.
+		   eventually the mode on this CRTC will be disabled */
+		for (j = 0; j < xf86_config->num_output; j++) {
+			xf86OutputPtr output = xf86_config->output[j];
+			connected = connected || (output->crtc == crtc
+					&& output->status
+					== XF86OutputStatusConnected);
+		}
+		if (!connected)
 			continue;
 
 		if (crtc->x != draw->x || crtc->y != draw->y ||
