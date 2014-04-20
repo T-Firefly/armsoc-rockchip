@@ -1022,22 +1022,11 @@ drmmode_cursor_init(ScreenPtr pScreen)
 
 	INFO_MSG("HW Cursor using [FB:%u]", omap_bo_fb(cursor->bo));
 
-	// see definition of CURSORPAD
-	if (!xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h,
-			HARDWARE_CURSOR_ARGB |
-			HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
-		ERROR_MSG("xf86_cursors_init() failed");
-		goto err_unref_cursor_bo;
-	}
-
-	INFO_MSG("HW cursor initialized");
 	drmmode->cursor = cursor;
 
 	ret = TRUE;
 	goto out;
 
-err_unref_cursor_bo:
-	omap_bo_unreference(cursor->bo);
 err_free_cursor:
 	free(cursor);
 out:
@@ -1054,8 +1043,6 @@ drmmode_cursor_fini(ScreenPtr pScreen)
 
 	if (!cursor)
 		return;
-
-	xf86_cursors_fini(pScreen);
 
 	omap_bo_unreference(cursor->bo);
 
@@ -2012,11 +1999,21 @@ Bool
 drmmode_screen_init(ScrnInfoPtr pScrn)
 {
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
 	Bool ret;
+
+	/* Per ScreenInit cursor initialization */
+	ret = xf86_cursors_init(pScreen, CURSORW - 2 * CURSORPAD, CURSORH,
+			HARDWARE_CURSOR_ARGB |
+			HARDWARE_CURSOR_UPDATE_UNHIDDEN);
+	if (!ret) {
+		ERROR_MSG("xf86_cursors_init() failed");
+		goto out;
+	}
 
 	ret = drmmode_uevent_init(pScrn);
 	if (!ret)
-		goto out;
+		goto err_fini_cursors;
 
 	AddGeneralSocket(drmmode->fd);
 
@@ -2028,11 +2025,14 @@ drmmode_screen_init(ScrnInfoPtr pScrn)
 		goto err_drmmode_uevent_fini;
 	}
 
+	ret = TRUE;
 	goto out;
 
 err_drmmode_uevent_fini:
 	RemoveGeneralSocket(drmmode->fd);
 	drmmode_uevent_fini(pScrn);
+err_fini_cursors:
+	xf86_cursors_fini(pScreen);
 out:
 	return ret;
 }
@@ -2041,10 +2041,13 @@ void
 drmmode_close_screen(ScrnInfoPtr pScrn)
 {
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	ScreenPtr pScreen = xf86ScrnToScreen(pScrn);
+
 	RemoveBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
 			drmmode_wakeup_handler, pScrn);
 	RemoveGeneralSocket(drmmode->fd);
 	drmmode_uevent_fini(pScrn);
+	xf86_cursors_fini(pScreen);
 }
 
 void drmmode_copy_fb(ScrnInfoPtr pScrn)
