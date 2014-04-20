@@ -901,18 +901,13 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-	int row, visible;
+	int row;
 	void* dst;
 	const char* src_row;
 	char* dst_row;
 
 	if (!cursor)
 		return;
-
-	visible = drmmode_crtc->cursor_visible;
-
-	if (visible)
-		drmmode_hide_cursor(crtc);
 
 	dst = omap_bo_map(cursor->bo);
 	omap_bo_cpu_prep(cursor->bo, OMAP_GEM_WRITE);
@@ -927,9 +922,6 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 		memset(dst_row + 4 * (CURSORW - CURSORPAD), 0, (4 * CURSORPAD));
 	}
 	omap_bo_cpu_fini(cursor->bo, 0);
-
-	if (visible)
-		drmmode_show_cursor(crtc);
 }
 
 Bool
@@ -2004,8 +1996,7 @@ drmmode_screen_init(ScrnInfoPtr pScrn)
 
 	/* Per ScreenInit cursor initialization */
 	ret = xf86_cursors_init(pScreen, CURSORW - 2 * CURSORPAD, CURSORH,
-			HARDWARE_CURSOR_ARGB |
-			HARDWARE_CURSOR_UPDATE_UNHIDDEN);
+			HARDWARE_CURSOR_ARGB);
 	if (!ret) {
 		ERROR_MSG("xf86_cursors_init() failed");
 		goto out;
