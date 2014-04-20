@@ -828,10 +828,13 @@ done:
 static void
 drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 {
+	ScrnInfoPtr pScrn = crtc->scrn;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	drmmode_cursor_ptr cursor = drmmode->cursor;
-	int crtc_x, crtc_y, src_x, src_y, w, h;
+	int32_t crtc_x, crtc_y;
+	uint32_t src_w, src_h;
+	int ret;
 
 	if (!cursor)
 		return;
@@ -842,37 +845,18 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	if (!drmmode_crtc->cursor_visible)
 		return;
 
-	w = CURSORW;
-	h = CURSORH;
 	crtc_x = cursor->x - CURSORPAD;
 	crtc_y = cursor->y;
-	src_x = 0;
-	src_y = 0;
 
-	if (crtc_x < 0) {
-		src_x += -crtc_x;
-		w -= -crtc_x;
-		crtc_x = 0;
-	}
+	/* Source values are 16.16 fixed point */
+	src_w = CURSORW << 16;
+	src_h = CURSORH << 16;
 
-	if (crtc_y < 0) {
-		src_y += -crtc_y;
-		h -= -crtc_y;
-		crtc_y = 0;
-	}
-
-	if ((crtc_x + w) > crtc->mode.HDisplay) {
-		w = crtc->mode.HDisplay - crtc_x;
-	}
-
-	if ((crtc_y + h) > crtc->mode.VDisplay) {
-		h = crtc->mode.VDisplay - crtc_y;
-	}
-
-	/* note src coords (last 4 args) are in Q16 format */
-	drmModeSetPlane(drmmode->fd, cursor->plane_id, drmmode_crtc_id(crtc),
-			omap_bo_fb(cursor->bo), 0, crtc_x, crtc_y, w, h,
-			src_x<<16, src_y<<16, w<<16, h<<16);
+	ret = drmModeSetPlane(drmmode->fd, cursor->plane_id,
+			drmmode_crtc_id(crtc), omap_bo_fb(cursor->bo), 0,
+			crtc_x, crtc_y, CURSORW, CURSORH, 0, 0, src_w, src_h);
+	if (ret)
+		ERROR_MSG("Failed to update cursor plane");
 }
 
 static void
