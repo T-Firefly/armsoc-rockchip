@@ -939,7 +939,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	int i;
 	uint32_t plane_id;
 	uint32_t zpos_prop_id;
-	Bool ret = FALSE;
+	Bool ret;
 
 	/* technically we probably don't have any size limit.. since we
 	 * are just using an overlay... but xserver will always create
@@ -952,6 +952,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 
 	if (drmmode->cursor) {
 		INFO_MSG("HW Cursor already initialized");
+		ret = FALSE;
 		goto out;
 	}
 
@@ -962,12 +963,14 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	plane_resources = drmModeGetPlaneResources(drmmode->fd);
 	if (!plane_resources) {
 		ERROR_MSG("drmModeGetPlaneResources failed: %s", strerror(errno));
+		ret = FALSE;
 		goto out;
 	}
 
 	if (plane_resources->count_planes < 1) {
 		ERROR_MSG("HW Cursor: not enough planes");
 		drmModeFreePlaneResources(plane_resources);
+		ret = FALSE;
 		goto out;
 	}
 
@@ -981,6 +984,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 					   DRM_MODE_OBJECT_PLANE);
 	if (!props) {
 		ERROR_MSG("No properties found for DRM [PLANE:%u]", plane_id);
+		ret = FALSE;
 		goto out;
 	}
 
@@ -1004,12 +1008,14 @@ drmmode_cursor_init(ScreenPtr pScreen)
 
 	if (!zpos_prop_id) {
 		ERROR_MSG("No 'zpos' property found for [PLANE:%u]", plane_id);
+		ret = FALSE;
 		goto out;
 	}
 
 	cursor = calloc(1, sizeof *cursor);
 	if (!cursor) {
 		ERROR_MSG("HW Cursor allocation failed");
+		ret = FALSE;
 		goto out;
 	}
 	cursor->zpos_prop_id = zpos_prop_id;
@@ -1018,6 +1024,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 			DRM_FORMAT_ARGB8888, 32);
 	if (!cursor->bo) {
 		ERROR_MSG("error allocating hw cursor buffer");
+		ret = FALSE;
 		goto err_free_cursor;
 	}
 
