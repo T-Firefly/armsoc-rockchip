@@ -321,20 +321,8 @@ drmmode_crtc_dpms(xf86CrtcPtr drmmode_crtc, int mode)
 static struct omap_bo *
 drmmode_new_fb(OMAPPtr pOMAP, int width, int height, int depth, int bpp)
 {
-	struct omap_bo *bo;
-
-	bo = omap_bo_new_with_dim(pOMAP->dev, width, height, depth, bpp,
+	return omap_bo_new_with_dim(pOMAP->dev, width, height, depth, bpp,
 			OMAP_BO_SCANOUT | OMAP_BO_WC);
-	if (!bo)
-		return NULL;
-
-	if (omap_bo_clear(bo))
-		goto err;
-
-	return bo;
-err:
-	omap_bo_unreference(bo);
-	return NULL;
 }
 
 static int
