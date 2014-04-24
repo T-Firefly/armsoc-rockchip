@@ -253,6 +253,9 @@ void *omap_bo_map(struct omap_bo *bo)
 	ScrnInfoPtr pScrn = bo->dev->pScrn;
 	void *map_addr;
 
+	if (bo->exynos_bo->vaddr)
+		return bo->exynos_bo->vaddr;
+
 	map_addr = exynos_bo_map(bo->exynos_bo);
 	if (!map_addr) {
 		ERROR_MSG("[BO:%u] EXYNOS_BO_MAP failed: %s",
