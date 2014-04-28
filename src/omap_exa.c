@@ -55,7 +55,6 @@ OMAPPixmapExchange(PixmapPtr a, PixmapPtr b)
 {
 	OMAPPixmapPrivPtr apriv = exaGetPixmapDriverPrivate(a);
 	OMAPPixmapPrivPtr bpriv = exaGetPixmapDriverPrivate(b);
-	exchange(apriv->priv, bpriv->priv);
 	exchange(apriv->bo, bpriv->bo);
 }
 

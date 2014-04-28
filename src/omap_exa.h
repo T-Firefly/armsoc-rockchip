@@ -107,7 +107,6 @@ draw2pix(DrawablePtr pDraw)
  */
 
 typedef struct {
-	void *priv;			/* EXA submodule private data */
 	struct omap_bo *bo;
 } OMAPPixmapPrivRec, *OMAPPixmapPrivPtr;
 
