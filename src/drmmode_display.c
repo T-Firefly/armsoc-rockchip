@@ -705,7 +705,7 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 			memset(scanout, 0, sizeof(*scanout));
 		} else {
 			/* Allocate a new BO */
-			bo = omap_bo_new_with_dim(pOMAP->dev,
+			bo = omap_bo_new_with_depth(pOMAP->dev,
 					crtc->mode.HDisplay,
 					crtc->mode.VDisplay, pScrn->depth,
 					pScrn->bitsPerPixel);
@@ -974,7 +974,6 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	 * that are too big
 	 */
 	const int w = CURSORW, h = CURSORH;
-	uint32_t handles[4], pitches[4], offsets[4]; /* we only use [0] */
 
 	TRACE_ENTER();
 
@@ -1035,20 +1034,17 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 	cursor->zpos_prop_id = zpos_prop_id;
 	cursor->plane_id = plane_id;
-	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32);
+	cursor->bo = omap_bo_new_with_format(pOMAP->dev, w, h,
+			DRM_FORMAT_ARGB8888, 32);
 	if (!cursor->bo) {
 		ERROR_MSG("error allocating hw cursor buffer");
 		goto err_free_cursor;
 	}
 
-	handles[0] = omap_bo_handle(cursor->bo);
-	pitches[0] = omap_bo_pitch(cursor->bo);
-	offsets[0] = 0;
-
-	if (drmModeAddFB2(drmmode->fd, w, h, DRM_FORMAT_ARGB8888,
-			handles, pitches, offsets, &cursor->fb_id, 0)) {
-		ERROR_MSG("drmModeAddFB2 failed: %s", strerror(errno));
-		goto err_unref_cursor;
+	cursor->fb_id = omap_bo_get_fb(cursor->bo);
+	if (!cursor->fb_id) {
+		ERROR_MSG("Failed to get cursor FB");
+		goto err_unref_cursor_bo;
 	}
 
 	INFO_MSG("HW Cursor using [FB:%u]", cursor->fb_id);
@@ -1058,7 +1054,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 			HARDWARE_CURSOR_ARGB |
 			HARDWARE_CURSOR_UPDATE_UNHIDDEN)) {
 		ERROR_MSG("xf86_cursors_init() failed");
-		goto err_rm_fb;
+		goto err_unref_cursor_bo;
 	}
 
 	INFO_MSG("HW cursor initialized");
@@ -1067,11 +1063,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	ret = TRUE;
 	goto out;
 
-err_rm_fb:
-	if (drmModeRmFB(drmmode->fd, cursor->fb_id))
-		ERROR_MSG("drmModeRmFB(%u) failed: %s", cursor->fb_id,
-				strerror(errno));
-err_unref_cursor:
+err_unref_cursor_bo:
 	omap_bo_unreference(cursor->bo);
 err_free_cursor:
 	free(cursor);
@@ -1091,11 +1083,6 @@ drmmode_cursor_fini(ScreenPtr pScreen)
 		return;
 
 	xf86_cursors_fini(pScreen);
-
-	/* Report any errors, but keep going... */
-	if (drmModeRmFB(drmmode->fd, cursor->fb_id))
-		ERROR_MSG("drmModeRmFB(%u) failed: %s", cursor->fb_id,
-				strerror(errno));
 
 	omap_bo_unreference(cursor->bo);
 
@@ -1629,7 +1616,7 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 				width, height);
 
 		/* allocate new scanout buffer */
-		new_scanout = omap_bo_new_with_dim(pOMAP->dev, width,
+		new_scanout = omap_bo_new_with_depth(pOMAP->dev, width,
 					     height, pScrn->depth,
 					     pScrn->bitsPerPixel);
 		if (!new_scanout) {

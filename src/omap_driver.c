@@ -167,7 +167,7 @@ OMAPMapMem(ScrnInfoPtr pScrn)
 	DEBUG_MSG("allocating new scanout buffer: %dx%d",
 			pScrn->virtualX, pScrn->virtualY);
 
-	pOMAP->scanout = omap_bo_new_with_dim(pOMAP->dev, pScrn->virtualX,
+	pOMAP->scanout = omap_bo_new_with_depth(pOMAP->dev, pScrn->virtualX,
 			pScrn->virtualY, pScrn->depth, pScrn->bitsPerPixel);
 	if (!pOMAP->scanout) {
 		xf86DrvMsg(pScrn->scrnIndex, X_ERROR,

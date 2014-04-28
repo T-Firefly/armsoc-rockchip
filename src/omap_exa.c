@@ -144,7 +144,7 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 	    omap_bo_bpp(priv->bo) != pPixmap->drawable.bitsPerPixel) {
 		/* re-allocate buffer! */
 		omap_bo_unreference(priv->bo);
-		priv->bo = omap_bo_new_with_dim(pOMAP->dev,
+		priv->bo = omap_bo_new_with_depth(pOMAP->dev,
 				pPixmap->drawable.width,
 				pPixmap->drawable.height,
 				pPixmap->drawable.depth,
