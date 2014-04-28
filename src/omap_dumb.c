@@ -109,6 +109,7 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	uint32_t pitch;
 	size_t size;
 	const uint32_t flags = EXYNOS_BO_NONCONTIG;
+	int ret;
 
 	new_buf = calloc(1, sizeof(*new_buf));
 	if (!new_buf)
@@ -123,14 +124,51 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	if (!new_buf->exynos_bo)
 	{
 		free(new_buf);
-		ERROR_MSG("EXYNOS_BO_CREATE(%ux%u bpp: %u pitch: %u size: %zu flags: 0x%x) failed: %s",
-				height, width, bpp, flags, pitch, size,
-				strerror(errno));
+		ERROR_MSG("EXYNOS_BO_CREATE(size: %zu flags: 0x%x) failed: %s",
+				size, flags, strerror(errno));
 		return NULL;
 	}
 
+	DEBUG_MSG("Created [BO:%u] {size: %u flags: 0x%x}",
+			new_buf->exynos_bo->handle, new_buf->exynos_bo->size,
+			flags);
+
+	if (depth) {
+		ret = drmModeAddFB(dev->exynos_dev.fd, width, height, depth,
+				bpp, pitch, new_buf->exynos_bo->handle,
+				&new_buf->fb_id);
+		if (ret < 0) {
+			ERROR_MSG("[BO:%u] add FB {%ux%u depth: %u bpp: %u pitch: %u} failed: %s",
+					new_buf->exynos_bo->handle, width,
+					height, depth, bpp, pitch,
+					strerror(errno));
+			goto destroy_bo;
+		}
+		DEBUG_MSG("Created [FB:%u] {%ux%u depth: %u bpp: %u pitch: %u} using [BO:%u]",
+				new_buf->fb_id, width, height, depth, bpp,
+				pitch, new_buf->exynos_bo->handle);
+	} else {
+		uint32_t handles[4] = { new_buf->exynos_bo->handle };
+		uint32_t pitches[4] = { pitch };
+		uint32_t offsets[4] = { 0 };
+
+		ret = drmModeAddFB2(dev->exynos_dev.fd, width, height,
+				pixel_format, handles, pitches, offsets,
+				&new_buf->fb_id, 0);
+		if (ret < 0) {
+			ERROR_MSG("[BO:%u] add FB {%ux%u format: %.4s pitch: %u} failed: %s",
+					new_buf->exynos_bo->handle, width,
+					height, (char *)&pixel_format, pitch,
+					strerror(errno));
+			goto destroy_bo;
+		}
+		/* print pixel_format as a 'four-cc' ASCII code */
+		DEBUG_MSG("[BO:%u] [FB:%u] Added FB: {%ux%u format: %.4s pitch: %u}",
+				new_buf->exynos_bo->handle, new_buf->fb_id,
+				width, height, (char *)&pixel_format, pitch);
+	}
+
 	new_buf->dev = dev;
-	new_buf->fb_id = 0;
 	new_buf->width = width;
 	new_buf->height = height;
 	new_buf->pitch = pitch;
@@ -141,13 +179,12 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	new_buf->acquired_exclusive = 0;
 	new_buf->acquire_cnt = 0;
 
-	DEBUG_MSG("[BO:%u] Created (%dx%d bpp: %u flags: 0x%x) => pitch: %u size: %zu",
-			new_buf->exynos_bo->handle, new_buf->width,
-			new_buf->height, new_buf->bpp,
-			new_buf->exynos_bo->flags, new_buf->pitch,
-			new_buf->exynos_bo->size);
-
 	return new_buf;
+
+destroy_bo:
+	exynos_bo_destroy(new_buf->exynos_bo);
+	free(new_buf);
+	return NULL;
 }
 
 struct omap_bo *omap_bo_new_with_depth(struct omap_device *dev, uint32_t width,
@@ -176,15 +213,12 @@ static void omap_bo_del(struct omap_bo *bo)
 			bo->exynos_bo->handle, bo->fb_id, bo->exynos_bo->name,
 			bo->exynos_bo->vaddr, bo->exynos_bo->size);
 
-	if (bo->fb_id)
-	{
-		res = drmModeRmFB(bo->dev->exynos_dev.fd, bo->fb_id);
-		if (res)
-			ERROR_MSG("[BO:%u] Remove [FB:%u] failed: %s",
-					bo->exynos_bo->handle, bo->fb_id,
-					strerror(errno));
-		assert(res == 0);
-	}
+	res = drmModeRmFB(bo->dev->exynos_dev.fd, bo->fb_id);
+	if (res)
+		ERROR_MSG("[BO:%u] Remove [FB:%u] failed: %s",
+				bo->exynos_bo->handle, bo->fb_id,
+				strerror(errno));
+	assert(res == 0);
 	exynos_bo_destroy(bo->exynos_bo);
 	free(bo);
 }
@@ -264,6 +298,11 @@ uint32_t omap_bo_depth(struct omap_bo *bo)
 	return bo->depth;
 }
 
+uint32_t omap_bo_fb(struct omap_bo *bo)
+{
+	return bo->fb_id;
+}
+
 void *omap_bo_map(struct omap_bo *bo)
 {
 	ScrnInfoPtr pScrn = bo->dev->pScrn;
@@ -331,56 +370,4 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 		ERROR_MSG("DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE failed: %s",
 				strerror(errno));
 	return ret;
-}
-
-uint32_t omap_bo_get_fb(struct omap_bo *bo)
-{
-	ScrnInfoPtr pScrn = bo->dev->pScrn;
-	int ret;
-	uint32_t fb_id;
-
-	if (bo->fb_id)
-		return bo->fb_id;
-
-	if (bo->depth) {
-		ret = drmModeAddFB(bo->dev->exynos_dev.fd, bo->width,
-				bo->height, bo->depth, bo->bpp, bo->pitch,
-				bo->exynos_bo->handle, &fb_id);
-		if (ret < 0) {
-			ERROR_MSG("[BO:%u] add FB {%ux%u depth: %u bpp: %u pitch: %u} failed: %s",
-					bo->exynos_bo->handle, bo->width,
-					bo->height, bo->depth, bo->bpp,
-					bo->pitch, strerror(errno));
-			return 0;
-		}
-		DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p Added FB: {%ux%u depth: %u bpp: %u pitch: %u}",
-				bo->exynos_bo->handle, bo->fb_id,
-				bo->exynos_bo->name, bo->exynos_bo->vaddr,
-				bo->width, bo->height, bo->depth, bo->bpp,
-				bo->pitch);
-	} else {
-		uint32_t handles[4] = { bo->exynos_bo->handle };
-		uint32_t pitches[4] = { bo->pitch };
-		uint32_t offsets[4] = { 0 };
-
-		ret = drmModeAddFB2(bo->dev->exynos_dev.fd, bo->width,
-				bo->height, bo->pixel_format, handles, pitches,
-				offsets, &fb_id, 0);
-		if (ret < 0) {
-			ERROR_MSG("[BO:%u] add FB {%ux%u format: %.4s pitch: %u} failed: %s",
-					bo->exynos_bo->handle, bo->width,
-					bo->height, (char *)&bo->pixel_format,
-					bo->pitch, strerror(errno));
-			return 0;
-		}
-		/* print pixel_format as a 'four-cc' ASCII code */
-		DEBUG_MSG("[BO:%u] [FB:%u] [FLINK:%u] mmap: %p Added FB: {%ux%u format: %.4s pitch: %u}",
-				bo->exynos_bo->handle, bo->fb_id,
-				bo->exynos_bo->name, bo->exynos_bo->vaddr,
-				bo->width, bo->height,
-				(char *)&bo->pixel_format, bo->pitch);
-	}
-
-	bo->fb_id = fb_id;
-	return bo->fb_id;
 }

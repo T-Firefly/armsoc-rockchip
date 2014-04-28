@@ -96,7 +96,6 @@ typedef struct {
 	/* hardware cursor: */
 	uint32_t plane_id;
 	struct omap_bo *bo;
-	uint32_t fb_id;
 	uint32_t zpos_prop_id;
 	int x, y;
 } drmmode_cursor_rec, *drmmode_cursor_ptr;
@@ -341,11 +340,6 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	uint32_t fb_id;
 	drmModeModeInfo kmode;
 
-	fb_id = omap_bo_get_fb(bo);
-	if (!fb_id) {
-		ERROR_MSG("Cannot set CRTC without fb id");
-		return -EFAULT;
-	}
 	output_ids = calloc(xf86_config->num_output, sizeof *output_ids);
 	assert(output_ids);
 
@@ -371,6 +365,7 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 
 	drmmode_crtc = crtc->driver_private;
 	crtc_id = drmmode_crtc->mode_crtc->crtc_id;
+	fb_id = omap_bo_fb(bo);
 	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id,
 			fb_id, x, y, output_ids, output_count,
 			&kmode);
@@ -875,8 +870,9 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 
 	/* note src coords (last 4 args) are in Q16 format */
 	drmModeSetPlane(drmmode->fd, cursor->plane_id,
-			drmmode_crtc->mode_crtc->crtc_id, cursor->fb_id, 0,
-			crtc_x, crtc_y, w, h, src_x<<16, src_y<<16, w<<16, h<<16);
+			drmmode_crtc->mode_crtc->crtc_id,
+			omap_bo_fb(cursor->bo), 0, crtc_x, crtc_y, w, h,
+			src_x<<16, src_y<<16, w<<16, h<<16);
 }
 
 static void
@@ -1041,13 +1037,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 		goto err_free_cursor;
 	}
 
-	cursor->fb_id = omap_bo_get_fb(cursor->bo);
-	if (!cursor->fb_id) {
-		ERROR_MSG("Failed to get cursor FB");
-		goto err_unref_cursor_bo;
-	}
-
-	INFO_MSG("HW Cursor using [FB:%u]", cursor->fb_id);
+	INFO_MSG("HW Cursor using [FB:%u]", omap_bo_fb(cursor->bo));
 
 	// see definition of CURSORPAD
 	if (!xf86_cursors_init(pScreen, w - 2 * CURSORPAD, h,

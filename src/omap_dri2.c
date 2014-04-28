@@ -487,7 +487,6 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	OMAPDRI2BufferPtr src = OMAPBUF(pSrcBuffer);
 	OMAPDRI2BufferPtr dst = OMAPBUF(pDstBuffer);
 	OMAPDRISwapCmd *cmd;
-	uint32_t src_fb_id;
 	OMAPPixmapPrivPtr src_priv, dst_priv;
 	int new_canflip, ret, num_flipped;
 	RegionRec region;
@@ -581,15 +580,14 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	src->previous_canflip = new_canflip;
 	dst->previous_canflip = new_canflip;
 
-	src_fb_id = omap_bo_get_fb(src_priv->bo);
-	/* ignore return code and just check for nonzero fb_id and decide
-	 * whether to blit or flip
-	 */
-	if (src_fb_id && new_canflip && !(pOMAP->has_resized)) {
+	if (new_canflip && !(pOMAP->has_resized)) {
+		uint32_t src_fb_id;
+
 		/* has_resized: On hotplug the fb size and crtc sizes arent updated
 		* hence on this event we do a copyb but flip from the next frame
 		* when the sizes are updated.
 		*/
+		src_fb_id = omap_bo_fb(src_priv->bo);
 		DEBUG_MSG("can flip:  %d", src_fb_id);
 		cmd->type = DRI2_FLIP_COMPLETE;
 		/* TODO: handle rollback if only multiple CRTC flip is only partially successful
