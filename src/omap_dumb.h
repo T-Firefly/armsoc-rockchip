@@ -28,7 +28,6 @@
 
 #define OMAP_BO_WC 1
 #define OMAP_BO_SCANOUT 0
-#define OMAP_PARAM_CHIPSET_ID 0
 
 struct omap_bo;
 struct omap_device;
