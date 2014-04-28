@@ -317,14 +317,6 @@ drmmode_crtc_dpms(xf86CrtcPtr drmmode_crtc, int mode)
 {
 	// FIXME - Implement this function
 }
-
-static struct omap_bo *
-drmmode_new_fb(OMAPPtr pOMAP, int width, int height, int depth, int bpp)
-{
-	return omap_bo_new_with_dim(pOMAP->dev, width, height, depth, bpp,
-			OMAP_BO_WC);
-}
-
 static int
 drmmode_set_crtc_off(xf86CrtcPtr crtc)
 {
@@ -713,9 +705,10 @@ static Bool drmmode_update_scanouts(ScrnInfoPtr pScrn)
 			memset(scanout, 0, sizeof(*scanout));
 		} else {
 			/* Allocate a new BO */
-			bo = drmmode_new_fb(pOMAP, crtc->mode.HDisplay,
-				crtc->mode.VDisplay, pScrn->depth,
-				pScrn->bitsPerPixel);
+			bo = omap_bo_new_with_dim(pOMAP->dev,
+					crtc->mode.HDisplay,
+					crtc->mode.VDisplay, pScrn->depth,
+					pScrn->bitsPerPixel);
 			if (!bo) {
 				ERROR_MSG("Scanout buffer allocation failed");
 				return FALSE;
@@ -1042,7 +1035,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 	cursor->zpos_prop_id = zpos_prop_id;
 	cursor->plane_id = plane_id;
-	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32, OMAP_BO_WC);
+	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32);
 	if (!cursor->bo) {
 		ERROR_MSG("error allocating hw cursor buffer");
 		goto err_free_cursor;
@@ -1636,7 +1629,7 @@ drmmode_xf86crtc_resize(ScrnInfoPtr pScrn, int width, int height)
 				width, height);
 
 		/* allocate new scanout buffer */
-		new_scanout = drmmode_new_fb(pOMAP, width,
+		new_scanout = omap_bo_new_with_dim(pOMAP->dev, width,
 					     height, pScrn->depth,
 					     pScrn->bitsPerPixel);
 		if (!new_scanout) {

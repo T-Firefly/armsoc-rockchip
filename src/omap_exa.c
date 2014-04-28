@@ -89,7 +89,6 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 	OMAPPixmapPrivPtr priv = exaGetPixmapDriverPrivate(pPixmap);
 	ScrnInfoPtr pScrn = pix2scrn(pPixmap);
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	uint32_t flags = OMAP_BO_WC;
 
 	if (pPixData)
 		pPixmap->devPrivate.ptr = pPixData;
@@ -149,12 +148,12 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 				pPixmap->drawable.width,
 				pPixmap->drawable.height,
 				pPixmap->drawable.depth,
-				pPixmap->drawable.bitsPerPixel, flags);
+				pPixmap->drawable.bitsPerPixel);
 
 		if (!priv->bo) {
-			ERROR_MSG("failed to allocate %dx%d bo, flags=%08x",
+			ERROR_MSG("failed to allocate %ux%u bo",
 					pPixmap->drawable.width,
-					pPixmap->drawable.height, flags);
+					pPixmap->drawable.height);
 			return FALSE;
 		}
 		pPixmap->devKind = omap_bo_pitch(priv->bo);

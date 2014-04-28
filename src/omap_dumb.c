@@ -29,6 +29,7 @@
 #include <xf86.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <exynos_drm.h>
 #include <libdrm/exynos_drmif.h>
 
 #include "omap_dumb.h"
@@ -100,12 +101,13 @@ void omap_device_del(struct omap_device *dev)
 
 struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev,
 			uint32_t width, uint32_t height, uint8_t depth,
-			uint8_t bpp, uint32_t flags)
+			uint8_t bpp)
 {
 	ScrnInfoPtr pScrn = dev->pScrn;
 	struct omap_bo *new_buf;
 	uint32_t pitch;
 	size_t size;
+	const uint32_t flags = EXYNOS_BO_NONCONTIG;
 
 	new_buf = calloc(1, sizeof(*new_buf));
 	if (!new_buf)

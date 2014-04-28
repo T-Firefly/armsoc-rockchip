@@ -26,8 +26,6 @@
 
 #include <stdint.h>
 
-#define OMAP_BO_WC 1
-
 struct omap_bo;
 struct omap_device;
 
@@ -49,8 +47,9 @@ int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op);
 int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op);
 
 struct omap_bo *omap_bo_new_with_dim(struct omap_device *dev, uint32_t width,
-			uint32_t height, uint8_t depth, uint8_t bpp,
-			uint32_t flags);
+			uint32_t height, uint8_t depth, uint8_t bpp);
+
+/* Getters without side-effects */
 uint32_t omap_bo_width(struct omap_bo *bo);
 uint32_t omap_bo_height(struct omap_bo *bo);
 uint32_t omap_bo_bpp(struct omap_bo *bo);
