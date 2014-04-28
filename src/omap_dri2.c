@@ -184,15 +184,6 @@ out:
 	return ret;
 }
 
-static PixmapPtr
-createpix(DrawablePtr pDraw)
-{
-	ScreenPtr pScreen = pDraw->pScreen;
-	int flags = canflip(pDraw, NULL) ? OMAP_CREATE_PIXMAP_SCANOUT : 0;
-	return pScreen->CreatePixmap(pScreen,
-			pDraw->width, pDraw->height, pDraw->depth, flags);
-}
-
 /**
  * Create Buffer.
  *
@@ -233,7 +224,8 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 
 		pPixmap->refcnt++;
 	} else {
-		pPixmap = createpix(pDraw);
+		pPixmap = pScreen->CreatePixmap(pScreen, pDraw->width,
+				pDraw->height, pDraw->depth, 0);
 	}
 
 	bo = OMAPPixmapBo(pPixmap);

@@ -322,7 +322,7 @@ static struct omap_bo *
 drmmode_new_fb(OMAPPtr pOMAP, int width, int height, int depth, int bpp)
 {
 	return omap_bo_new_with_dim(pOMAP->dev, width, height, depth, bpp,
-			OMAP_BO_SCANOUT | OMAP_BO_WC);
+			OMAP_BO_WC);
 }
 
 static int
@@ -1042,8 +1042,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 	cursor->zpos_prop_id = zpos_prop_id;
 	cursor->plane_id = plane_id;
-	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32,
-			OMAP_BO_SCANOUT | OMAP_BO_WC);
+	cursor->bo = omap_bo_new_with_dim(pOMAP->dev, w, h, 0, 32, OMAP_BO_WC);
 	if (!cursor->bo) {
 		ERROR_MSG("error allocating hw cursor buffer");
 		goto err_free_cursor;

@@ -118,9 +118,6 @@ OMAPModifyPixmapHeader(PixmapPtr pPixmap, int width, int height,
 		priv->bo = pOMAP->scanout;
 	}
 
-	if (pPixmap->usage_hint & OMAP_CREATE_PIXMAP_SCANOUT)
-		flags |= OMAP_BO_SCANOUT;
-
 	if (depth > 0)
 		pPixmap->drawable.depth = depth;
 

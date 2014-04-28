@@ -110,8 +110,6 @@ typedef struct {
 	struct omap_bo *bo;
 } OMAPPixmapPrivRec, *OMAPPixmapPrivPtr;
 
-#define OMAP_CREATE_PIXMAP_SCANOUT 0x80000000
-
 
 void * OMAPCreatePixmap (ScreenPtr pScreen, int width, int height,
 		int depth, int usage_hint, int bitsPerPixel,
