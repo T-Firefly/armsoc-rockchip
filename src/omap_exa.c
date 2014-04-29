@@ -338,7 +338,7 @@ OMAPPrepareAccess(PixmapPtr pPixmap, int index)
 		omap_bo_unreference(priv->bo);
 		priv->bo = pOMAP->scanout;
 		pPixmap->devPrivate.ptr = omap_bo_map(pOMAP->scanout);
-	} else if (!has_fullsize_bo(pPixmap, priv->bo)) {
+	} else if (has_fullsize_bo(pPixmap, priv->bo)) {
 		/* For root pixmap read access:
 		 * If current per-crtc bo has the same dimensions as the root
 		 * pixmap, it is safe to allow direct read access to it.
