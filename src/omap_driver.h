@@ -179,8 +179,8 @@ typedef struct _OMAPRec
  * drmmode functions..
  */
 Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd);
-void drmmode_screen_init(ScrnInfoPtr pScrn);
-void drmmode_screen_fini(ScrnInfoPtr pScrn);
+Bool drmmode_screen_init(ScrnInfoPtr pScrn);
+void drmmode_close_screen(ScrnInfoPtr pScrn);
 void drmmode_adjust_frame(ScrnInfoPtr pScrn, int x, int y);
 int drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
 		int* num_flipped);

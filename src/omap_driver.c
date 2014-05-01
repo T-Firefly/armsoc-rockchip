@@ -745,7 +745,10 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 	/* Wrap some screen functions: */
 	wrap(pOMAP, pScreen, CloseScreen, OMAPCloseScreen);
 
-	drmmode_screen_init(pScrn);
+	if (!drmmode_screen_init(pScrn)) {
+		ERROR_MSG("drmmode_screen_init() failed!");
+		goto fail;
+	}
 
 	TRACE_EXIT();
 	return TRUE;
@@ -780,7 +783,7 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 
 	TRACE_ENTER();
 
-	drmmode_screen_fini(pScrn);
+	drmmode_close_screen(pScrn);
 
 	if (pScrn->vtSema == TRUE) {
 		OMAPLeaveVT(VT_FUNC_ARGS(0));

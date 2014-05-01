@@ -1822,56 +1822,72 @@ drmmode_handle_uevents(int fd, void *closure)
 	udev_device_unref(dev);
 }
 
-static void
+static Bool
 drmmode_uevent_init(ScrnInfoPtr pScrn)
 {
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
 	struct udev *u;
 	struct udev_monitor *mon;
+	Bool ret;
 
 	TRACE_ENTER();
 
 	u = udev_new();
-	if (!u)
-		return;
+	if (!u) {
+		ret = FALSE;
+		goto out;
+	}
 	mon = udev_monitor_new_from_netlink(u, "udev");
 	if (!mon) {
-		udev_unref(u);
-		return;
+		ret = FALSE;
+		goto err_udev_unref;
 	}
 
 	if (udev_monitor_filter_add_match_subsystem_devtype(mon,
 			"drm",
 			"drm_minor") < 0 ||
 			udev_monitor_enable_receiving(mon) < 0) {
-		udev_monitor_unref(mon);
-		udev_unref(u);
-		return;
+		ret = FALSE;
+		goto err_udev_monitor_unref;
 	}
 
 	drmmode->uevent_handler =
 			xf86AddGeneralHandler(udev_monitor_get_fd(mon),
 					drmmode_handle_uevents, pScrn);
+	if (!drmmode->uevent_handler) {
+		ret = FALSE;
+		goto err_udev_monitor_unref;
+	}
 
 	drmmode->uevent_monitor = mon;
 
+	ret = TRUE;
+	goto out;
+
+err_udev_monitor_unref:
+	udev_monitor_unref(mon);
+err_udev_unref:
+	udev_unref(u);
+out:
 	TRACE_EXIT();
+	return ret;
 }
 
 static void
 drmmode_uevent_fini(ScrnInfoPtr pScrn)
 {
-	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	drmmode_ptr drmmode;
+	struct udev *u;
 
 	TRACE_ENTER();
 
-	if (drmmode->uevent_handler) {
-		struct udev *u = udev_monitor_get_udev(drmmode->uevent_monitor);
-		xf86RemoveGeneralHandler(drmmode->uevent_handler);
-
-		udev_monitor_unref(drmmode->uevent_monitor);
-		udev_unref(u);
-	}
+	drmmode = drmmode_from_scrn(pScrn);
+	u = udev_monitor_get_udev(drmmode->uevent_monitor);
+	xf86RemoveGeneralHandler(drmmode->uevent_handler);
+	drmmode->uevent_handler = NULL;
+	udev_monitor_unref(drmmode->uevent_monitor);
+	drmmode->uevent_monitor = NULL;
+	udev_unref(u);
 
 	TRACE_EXIT();
 }
@@ -1897,23 +1913,40 @@ drmmode_wait_for_event(ScrnInfoPtr pScrn)
 	drmHandleEvent(drmmode->fd, &event_context);
 }
 
-void
+Bool
 drmmode_screen_init(ScrnInfoPtr pScrn)
 {
 	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	Bool ret;
 
-	drmmode_uevent_init(pScrn);
+	ret = drmmode_uevent_init(pScrn);
+	if (!ret)
+		goto out;
 
 	AddGeneralSocket(drmmode->fd);
 
 	/* Register a wakeup handler to get informed on DRM events */
-	RegisterBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
+	ret = RegisterBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
 			drmmode_wakeup_handler, pScrn);
+	if (!ret)
+		goto err_drmmode_uevent_fini;
+
+	goto out;
+
+err_drmmode_uevent_fini:
+	RemoveGeneralSocket(drmmode->fd);
+	drmmode_uevent_fini(pScrn);
+out:
+	return ret;
 }
 
 void
-drmmode_screen_fini(ScrnInfoPtr pScrn)
+drmmode_close_screen(ScrnInfoPtr pScrn)
 {
+	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
+	RemoveBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
+			drmmode_wakeup_handler, pScrn);
+	RemoveGeneralSocket(drmmode->fd);
 	drmmode_uevent_fini(pScrn);
 }
 
