@@ -504,7 +504,7 @@ OMAPPreInit(ScrnInfoPtr pScrn, int flags)
 	 */
 
 	/* Do initial KMS setup: */
-	if (!drmmode_pre_init(pScrn, pOMAP->drmFD, (pScrn->bitsPerPixel >> 3))) {
+	if (!drmmode_pre_init(pScrn, pOMAP->drmFD)) {
 		ERROR_MSG("Cannot get KMS resources");
 	} else {
 		INFO_MSG("Got KMS resources");

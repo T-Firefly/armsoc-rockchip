@@ -103,7 +103,6 @@ typedef struct {
 typedef struct {
 	int fd;
 	drmModeResPtr mode_res;
-	int cpp;
 	struct udev_monitor *uevent_monitor;
 	InputHandlerProc uevent_handler;
 	drmmode_cursor_ptr cursor;
@@ -1641,7 +1640,7 @@ static const xf86CrtcConfigFuncsRec drmmode_xf86crtc_config_funcs = {
 };
 
 
-Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd, int cpp)
+Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 {
 	drmmode_ptr drmmode;
 	int i;
@@ -1655,8 +1654,6 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd, int cpp)
 
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
-
-	drmmode->cpp = cpp;
 	drmmode->mode_res = drmModeGetResources(drmmode->fd);
 	if (!drmmode->mode_res) {
 		return FALSE;
