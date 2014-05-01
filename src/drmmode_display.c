@@ -313,17 +313,26 @@ drmmode_crtc_dpms(xf86CrtcPtr drmmode_crtc, int mode)
 {
 	// FIXME - Implement this function
 }
-static int
+
+static Bool
 drmmode_set_crtc_off(xf86CrtcPtr crtc)
 {
+	ScrnInfoPtr pScrn = crtc->scrn;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	int ret;
-	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, drmmode_crtc_id(crtc),
-			0, 0, 0, NULL, 0, NULL);
-	return ret;
+	uint32_t crtc_id = drmmode_crtc_id(crtc);
+	int rc;
+
+	rc = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id, 0, 0, 0, NULL,
+			0, NULL);
+	if (rc)
+		ERROR_MSG("[CRTC:%u] disable failed: %s", crtc_id,
+				strerror(errno));
+
+	/* drmModeSetCrtc returns non-zero on error; convert to Bool */
+	return (rc) ? FALSE : TRUE;
 }
 
-static int
+static Bool
 drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 			int y)
 {
@@ -331,11 +340,12 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	xf86OutputPtr output;
 	drmmode_crtc_private_ptr drmmode_crtc;
 	drmmode_output_private_ptr drmmode_output;
-	int ret, output_count, i;
+	int rc, output_count, i;
 	uint32_t *output_ids = NULL;
 	uint32_t fb_id;
 	uint32_t crtc_id = drmmode_crtc_id(crtc);
 	drmModeModeInfo kmode;
+	Bool ret;
 
 	output_ids = calloc(xf86_config->num_output, sizeof *output_ids);
 	assert(output_ids);
@@ -352,8 +362,8 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 		output_count++;
 	}
 	if (!output_count) {
-		ERROR_MSG("No crtc outputs found");
-		ret = -ENODEV;
+		ERROR_MSG("[CRTC:%u] No outputs found", crtc_id);
+		ret = FALSE;
 		goto out;
 	}
 
@@ -361,14 +371,13 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 
 	drmmode_crtc = crtc->driver_private;
 	fb_id = omap_bo_fb(bo);
-	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id,
-			fb_id, x, y, output_ids, output_count,
-			&kmode);
-	if (ret) {
-		ERROR_MSG("crtc_id:%d failed to set mode: %s",
-			  crtc_id, strerror(-ret));
-		goto out;
-	}
+	/* drmModeSetCrtc returns non-zero on error; convert to Bool */
+	rc = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id, fb_id, x, y,
+			output_ids, output_count, &kmode);
+	if (rc)
+		ERROR_MSG("[CRTC:%u] failed to set mode with [FB:%u] @ (%d, %d): %s",
+				crtc_id, fb_id, x, y, strerror(errno));
+	ret = rc ? FALSE : TRUE;
 
 out:
 	free(output_ids);
@@ -427,7 +436,7 @@ drmmode_copy_from_to(const uint8_t *src, int src_x, int src_y, int src_width,
  * It also assumes the two regions are non-overlapping memory areas, even though
  * they may overlap in pixel space.
  */
-static int
+static Bool
 drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 		struct omap_bo *dst_bo, int dst_x, int dst_y)
 {
@@ -436,7 +445,7 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 
 	if (!src_bo || !dst_bo) {
 		ERROR_MSG("copy_bo received invalid arguments");
-		return -EINVAL;
+		return FALSE;
 	}
 
 	assert(omap_bo_bpp(src_bo) == omap_bo_bpp(dst_bo));
@@ -444,12 +453,12 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 	src = omap_bo_map(src_bo);
 	if (!src) {
 		ERROR_MSG("Couldn't map src bo");
-		return -EIO;
+		return FALSE;
 	}
 	dst = omap_bo_map(dst_bo);
 	if (!dst) {
 		ERROR_MSG("Couldn't map dst bo");
-		return -EIO;
+		return FALSE;
 	}
 
 	// acquire for write first, so if (probably impossible) src==dst acquire
@@ -467,34 +476,32 @@ drmmode_copy_bo(ScrnInfoPtr pScrn, struct omap_bo *src_bo, int src_x, int src_y,
 	omap_bo_cpu_fini(src_bo, 0);
 	omap_bo_cpu_fini(dst_bo, 0);
 
-	return 0;
+	return TRUE;
 }
 
 static Bool drmmode_set_blit_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int rc;
+	Bool ret;
 
 	if (!crtc->enabled)
 		return TRUE;
 
-	/* Note: drmmode_set_crtc returns <0 on error, not a Bool */
-	rc = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x, crtc->y);
-	if (rc) {
+	ret = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x, crtc->y);
+	if (!ret) {
 		ERROR_MSG("[CRTC:%u] set root scanout failed",
 				drmmode_crtc_id(crtc));
 		drmmode_set_crtc_off(crtc);
-		return FALSE;
 	}
 
-	return TRUE;
+	return ret;
 }
 
 static Bool drmmode_set_flip_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	OMAPScanoutPtr scanout;
-	int rc;
+	Bool ret;
 
 	if (!crtc->enabled)
 		return TRUE;
@@ -503,22 +510,20 @@ static Bool drmmode_set_flip_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc)
 	if (!scanout)
 		return TRUE;
 
-	/* Note: drmmode_set_crtc returns <0 on error, not a Bool */
-	rc = drmmode_set_crtc(pScrn, crtc, scanout->bo, 0, 0);
-	if (rc) {
+	ret = drmmode_set_crtc(pScrn, crtc, scanout->bo, 0, 0);
+	if (!ret) {
 		ERROR_MSG("[CRTC:%u] set per-crtc scanout failed",
 				drmmode_crtc_id(crtc));
 		drmmode_set_crtc_off(crtc);
-		return FALSE;
 	}
 
-	return TRUE;
+	return ret;
 }
 
 Bool drmmode_update_scanout_from_crtcs(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	int ret, i;
+	int i;
 	Bool res;
 
 	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
@@ -535,11 +540,10 @@ Bool drmmode_update_scanout_from_crtcs(ScrnInfoPtr pScrn)
 		if (!scanout->valid)
 			continue;
 
-		ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
-					  scanout->y, pOMAP->scanout, 0, 0);
-		if (ret) {
+		res = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
+				scanout->y, pOMAP->scanout, 0, 0);
+		if (!res) {
 			ERROR_MSG("Copy crtc to scanout failed");
-			res = FALSE;
 			goto out;
 		}
 	}
@@ -562,7 +566,8 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-	int ret, i;
+	int i;
+	Bool ret;
 
 	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
 		return TRUE;
@@ -582,7 +587,7 @@ Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn)
 
 		ret = drmmode_copy_bo(pScrn, scanout->bo, scanout->x,
 					  scanout->y, pOMAP->scanout, 0, 0);
-		if (ret) {
+		if (!ret) {
 			ERROR_MSG("Copy crtc to scanout failed");
 			return FALSE;
 		}
@@ -621,7 +626,8 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 {
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
-	int ret, i;
+	int i;
+	Bool ret;
 
 	if (pOMAP->flip_mode == OMAP_FLIP_ENABLED)
 		return TRUE;
@@ -638,7 +644,7 @@ Bool drmmode_set_flip_mode(ScrnInfoPtr pScrn)
 		ret = drmmode_copy_bo(pScrn, pOMAP->scanout, 0, 0,
 					  scanout->bo, scanout->x,
 					  scanout->y);
-		if (ret) {
+		if (!ret) {
 			ERROR_MSG("Copy scanout to crtc failed");
 			return FALSE;
 		}
@@ -745,7 +751,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	ScrnInfoPtr pScrn = crtc->scrn;
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
-	int ret;
+	Bool ret;
 	int i;
 
 	TRACE_ENTER();
@@ -757,7 +763,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	// On a modeset, we should switch to blit mode to get a single scanout buffer
 	// and we will switch back to flip mode on the next flip request
 	if (pOMAP->flip_mode == OMAP_FLIP_DISABLED)
-		ret = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x, crtc->y) == 0;
+		ret = drmmode_set_crtc(pScrn, crtc, pOMAP->scanout, crtc->x, crtc->y);
 	else
 		ret = drmmode_set_blit_mode(pScrn);
 	if (!ret)
