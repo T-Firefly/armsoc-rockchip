@@ -110,7 +110,7 @@ typedef struct {
 
 typedef struct {
 	drmmode_ptr drmmode;
-	drmModeCrtcPtr mode_crtc;
+	uint32_t id;
 	int cursor_visible;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
@@ -202,10 +202,10 @@ drmmode_scanout_set(OMAPScanoutPtr scanouts, int x, int y, struct omap_bo *bo)
 	s->bo = bo;
 }
 
-int drmmode_crtc_id(xf86CrtcPtr crtc)
+static uint32_t drmmode_crtc_id(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	return drmmode_crtc->mode_crtc->crtc_id;
+	return drmmode_crtc->id;
 }
 
 int drmmode_crtc_index_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw)
@@ -320,9 +320,8 @@ drmmode_set_crtc_off(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	int ret;
-	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd,
-			drmmode_crtc->mode_crtc->crtc_id, 0, 0, 0, NULL, 0,
-			NULL);
+	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, drmmode_crtc_id(crtc),
+			0, 0, 0, NULL, 0, NULL);
 	return ret;
 }
 
@@ -334,9 +333,10 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	xf86OutputPtr output;
 	drmmode_crtc_private_ptr drmmode_crtc;
 	drmmode_output_private_ptr drmmode_output;
-	int ret, crtc_id, output_count, i;
+	int ret, output_count, i;
 	uint32_t *output_ids = NULL;
 	uint32_t fb_id;
+	uint32_t crtc_id = drmmode_crtc_id(crtc);
 	drmModeModeInfo kmode;
 
 	output_ids = calloc(xf86_config->num_output, sizeof *output_ids);
@@ -363,7 +363,6 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 	drmmode_ConvertToKMode(pScrn, &kmode, &crtc->mode);
 
 	drmmode_crtc = crtc->driver_private;
-	crtc_id = drmmode_crtc->mode_crtc->crtc_id;
 	fb_id = omap_bo_fb(bo);
 	ret = drmModeSetCrtc(drmmode_crtc->drmmode->fd, crtc_id,
 			fb_id, x, y, output_ids, output_count,
@@ -868,8 +867,7 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	}
 
 	/* note src coords (last 4 args) are in Q16 format */
-	drmModeSetPlane(drmmode->fd, cursor->plane_id,
-			drmmode_crtc->mode_crtc->crtc_id,
+	drmModeSetPlane(drmmode->fd, cursor->plane_id, drmmode_crtc_id(crtc),
 			omap_bo_fb(cursor->bo), 0, crtc_x, crtc_y, w, h,
 			src_x<<16, src_y<<16, w<<16, h<<16);
 }
@@ -887,9 +885,8 @@ drmmode_hide_cursor(xf86CrtcPtr crtc)
 	drmmode_crtc->cursor_visible = FALSE;
 
 	/* set plane's fb_id to 0 to disable it */
-	drmModeSetPlane(drmmode->fd, cursor->plane_id,
-			drmmode_crtc->mode_crtc->crtc_id, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0);
+	drmModeSetPlane(drmmode->fd, cursor->plane_id, drmmode_crtc_id(crtc),
+			0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 
 static void
@@ -1088,7 +1085,7 @@ drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	int ret;
 
-	ret = drmModeCrtcSetGamma(drmmode->fd, drmmode_crtc->mode_crtc->crtc_id,
+	ret = drmModeCrtcSetGamma(drmmode->fd, drmmode_crtc_id(crtc),
 			size, red, green, blue);
 	if (ret != 0) {
 		xf86DrvMsg(crtc->scrn->scrnIndex, X_ERROR,
@@ -1123,8 +1120,7 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 		return;
 
 	drmmode_crtc = xnfcalloc(1, sizeof *drmmode_crtc);
-	drmmode_crtc->mode_crtc = drmModeGetCrtc(drmmode->fd,
-			drmmode->mode_res->crtcs[num]);
+	drmmode_crtc->id = drmmode->mode_res->crtcs[num];
 	drmmode_crtc->drmmode = drmmode;
 
 	// FIXME - potentially add code to allocate a HW cursor here.

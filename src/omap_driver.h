@@ -192,7 +192,6 @@ OMAPScanoutPtr drmmode_scanout_from_drawable(OMAPScanoutPtr scanouts,
 		DrawablePtr pDraw);
 void drmmode_scanout_set(OMAPScanoutPtr scanouts, int x, int y,
 		struct omap_bo *bo);
-int drmmode_crtc_id(xf86CrtcPtr crtc);
 int drmmode_crtc_id_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw);
 int drmmode_crtc_index_from_drawable(ScrnInfoPtr pScrn, DrawablePtr pDraw);
 Bool drmmode_set_blit_mode(ScrnInfoPtr pScrn);
