@@ -127,7 +127,6 @@ typedef struct {
 	drmmode_ptr drmmode;
 	int output_id;
 	drmModeConnectorPtr mode_output;
-	drmModeEncoderPtr mode_encoder;
 	drmModePropertyBlobPtr edid_blob;
 	int num_props;
 	drmmode_prop_ptr props;
@@ -1525,6 +1524,7 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 	drmModeEncoderPtr kencoder;
 	drmmode_output_private_ptr drmmode_output;
 	char name[32];
+	CARD32 possible_crtcs, possible_clones;
 
 	TRACE_ENTER();
 
@@ -1533,11 +1533,20 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 	if (!koutput)
 		return;
 
+	/*
+	 * Fetch possible clones and crtcs from this connector's encoder.
+	 * We assume here that there is only one possible encoder for this
+	 * connector.
+	 */
 	kencoder = drmModeGetEncoder(drmmode->fd, koutput->encoders[0]);
 	if (!kencoder) {
 		drmModeFreeConnector(koutput);
 		return;
 	}
+
+	possible_crtcs = kencoder->possible_crtcs;
+	possible_clones = kencoder->possible_clones;
+	drmModeFreeEncoder(kencoder);
 
 	if (koutput->connector_type >= NUM_OUTPUT_NAMES)
 		snprintf(name, 32, "Unknown%d-%d", koutput->connector_type,
@@ -1549,7 +1558,6 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 
 	output = xf86OutputCreate(pScrn, &drmmode_output_funcs, name);
 	if (!output) {
-		drmModeFreeEncoder(kencoder);
 		drmModeFreeConnector(koutput);
 		return;
 	}
@@ -1558,21 +1566,19 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 	if (!drmmode_output) {
 		xf86OutputDestroy(output);
 		drmModeFreeConnector(koutput);
-		drmModeFreeEncoder(kencoder);
 		return;
 	}
 
 	drmmode_output->output_id = drmmode->mode_res->connectors[num];
 	drmmode_output->mode_output = koutput;
-	drmmode_output->mode_encoder = kencoder;
 	drmmode_output->drmmode = drmmode;
 
 	output->mm_width = koutput->mmWidth;
 	output->mm_height = koutput->mmHeight;
 	output->driver_private = drmmode_output;
 
-	output->possible_crtcs = kencoder->possible_crtcs;
-	output->possible_clones = kencoder->possible_clones;
+	output->possible_crtcs = possible_crtcs;
+	output->possible_clones = possible_clones;
 	output->interlaceAllowed = TRUE;
 
 	TRACE_EXIT();
