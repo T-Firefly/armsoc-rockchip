@@ -936,10 +936,9 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	drmmode_cursor_ptr cursor;
 	drmModePlaneRes *plane_resources;
 	drmModeObjectPropertiesPtr props;
-	drmModePropertyPtr prop;
 	int i;
 	uint32_t plane_id;
-	int zpos_prop_id;
+	uint32_t zpos_prop_id;
 	Bool ret = FALSE;
 
 	/* technically we probably don't have any size limit.. since we
@@ -986,9 +985,16 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 
 	/* Find first "zpos" property for our HW Cursor plane */
-	zpos_prop_id = -1;
-	for (i = 0; i < props->count_props && zpos_prop_id == -1; i++) {
-		prop = drmModeGetProperty(drmmode->fd, props->props[i]);
+	zpos_prop_id = 0;
+	for (i = 0; i < props->count_props && !zpos_prop_id; i++) {
+		uint32_t prop_id = props->props[i];
+		drmModePropertyPtr prop =
+				drmModeGetProperty(drmmode->fd, prop_id);
+		if (!prop) {
+			ERROR_MSG("HW Cursor: Failed to get zpos [PROPERTY:%u] for [PLANE:%u]",
+					prop_id, plane_id);
+			continue;
+		}
 
 		if (!strcmp(prop->name, "zpos"))
 			zpos_prop_id = prop->prop_id;
@@ -996,7 +1002,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	}
 	drmModeFreeObjectProperties(props);
 
-	if (zpos_prop_id == -1) {
+	if (!zpos_prop_id) {
 		ERROR_MSG("No 'zpos' property found for [PLANE:%u]", plane_id);
 		goto out;
 	}
@@ -1237,28 +1243,24 @@ drmmode_output_dpms(xf86OutputPtr output, int mode)
 {
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
 	drmModeConnectorPtr koutput = drmmode_output->mode_output;
-	drmModePropertyPtr prop;
 	drmmode_ptr drmmode = drmmode_output->drmmode;
-	int mode_id = -1, i;
+	int i;
+	uint32_t dpms_prop_id = 0;
 
-	for (i = 0; i < koutput->count_props; i++) {
+	for (i = 0; i < koutput->count_props && !dpms_prop_id; i++) {
+		drmModePropertyPtr prop;
 		prop = drmModeGetProperty(drmmode->fd, koutput->props[i]);
 		if (!prop)
 			continue;
 		if ((prop->flags & DRM_MODE_PROP_ENUM) &&
-		    !strcmp(prop->name, "DPMS")) {
-			mode_id = koutput->props[i];
-			drmModeFreeProperty(prop);
-			break;
-		}
+		    !strcmp(prop->name, "DPMS"))
+			dpms_prop_id = koutput->props[i];
 		drmModeFreeProperty(prop);
 	}
 
-	if (mode_id < 0)
-		return;
-
-	drmModeConnectorSetProperty(drmmode->fd, drmmode_output->id, mode_id,
-			mode);
+	if (dpms_prop_id)
+		drmModeConnectorSetProperty(drmmode->fd, drmmode_output->id,
+				dpms_prop_id, mode);
 }
 
 static Bool
