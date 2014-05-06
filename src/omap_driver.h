@@ -185,8 +185,6 @@ void drmmode_adjust_frame(ScrnInfoPtr pScrn, int x, int y);
 int drmmode_page_flip(DrawablePtr draw, uint32_t fb_id, void *priv,
 		int* num_flipped);
 void drmmode_wait_for_event(ScrnInfoPtr pScrn);
-Bool drmmode_cursor_init(ScreenPtr pScreen);
-void drmmode_cursor_fini(ScreenPtr pScreen);
 void drmmode_copy_fb(ScrnInfoPtr pScrn);
 OMAPScanoutPtr drmmode_scanout_from_drawable(OMAPScanoutPtr scanouts,
 		DrawablePtr pDraw);

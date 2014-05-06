@@ -103,12 +103,12 @@ typedef struct {
 	int fd;
 	struct udev_monitor *uevent_monitor;
 	InputHandlerProc uevent_handler;
-	drmmode_cursor_ptr cursor;
 } drmmode_rec, *drmmode_ptr;
 
 typedef struct {
 	drmmode_ptr drmmode;
 	uint32_t id;
+	drmmode_cursor_rec cursor;
 } drmmode_crtc_private_rec, *drmmode_crtc_private_ptr;
 
 typedef struct {
@@ -764,8 +764,6 @@ static Bool
 drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 		Rotation rotation, int x, int y)
 {
-	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
 	ScrnInfoPtr pScrn = crtc->scrn;
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	xf86CrtcConfigPtr   xf86_config = XF86_CRTC_CONFIG_PTR(crtc->scrn);
@@ -815,8 +813,7 @@ drmmode_set_mode_major(xf86CrtcPtr crtc, DisplayModePtr mode,
 	 * The screen has reconfigured, so reload hw cursor images as needed,
 	 * and adjust cursor positions.
 	 */
-	if (drmmode->cursor)
-		xf86_reload_cursors(pScrn->pScreen);
+	xf86_reload_cursors(pScrn->pScreen);
 
 done:
 	TRACE_EXIT();
@@ -849,7 +846,7 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	ScrnInfoPtr pScrn = crtc->scrn;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	drmmode_cursor_ptr cursor = drmmode->cursor;
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
 	int32_t crtc_x, crtc_y;
 	uint32_t src_w, src_h;
 	int ret;
@@ -890,7 +887,7 @@ drmmode_hide_cursor(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
 	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	drmmode_cursor_ptr cursor = drmmode->cursor;
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
 
 	if (!cursor)
 		return;
@@ -904,8 +901,7 @@ static void
 drmmode_show_cursor(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	drmmode_cursor_ptr cursor = drmmode->cursor;
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
 
 	if (!cursor)
 		return;
@@ -917,8 +913,7 @@ static void
 drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
-	drmmode_ptr drmmode = drmmode_crtc->drmmode;
-	drmmode_cursor_ptr cursor = drmmode->cursor;
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
 	int row;
 	void* dst;
 	const char* src_row;
@@ -942,144 +937,82 @@ drmmode_load_cursor_argb(xf86CrtcPtr crtc, CARD32 *image)
 	omap_bo_cpu_fini(cursor->bo, 0);
 }
 
-Bool
-drmmode_cursor_init(ScreenPtr pScreen)
+static Bool
+drm_plane_supports_format(drmModePlanePtr plane, uint32_t format)
 {
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	OMAPPtr pOMAP = OMAPPTR(pScrn);
-	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
-	drmmode_cursor_ptr cursor;
-	drmModePlaneRes *plane_resources;
-	drmModeObjectPropertiesPtr props;
-	int i;
-	uint32_t plane_id;
-	uint32_t zpos_prop_id;
-	int rc;
-	Bool ret;
+	uint32_t f;
+	for (f = 0; f < plane->count_formats; f++)
+		if (plane->formats[f] == format)
+			return TRUE;
+	return FALSE;
+}
 
-	/* technically we probably don't have any size limit.. since we
-	 * are just using an overlay... but xserver will always create
-	 * cursor images in the max size, so don't use width/height values
-	 * that are too big
-	 */
-	const int w = CURSORW, h = CURSORH;
+static Bool
+drm_plane_can_be_cursor(ScrnInfoPtr pScrn, int fd, uint32_t plane_id, int num)
+{
+	uint32_t crtc_mask = 1 << num;
+	drmModePlanePtr plane;
+	Bool ret = FALSE;
 
-	TRACE_ENTER();
-
-	if (drmmode->cursor) {
-		INFO_MSG("HW Cursor already initialized");
-		ret = FALSE;
-		goto out;
+	plane = drmModeGetPlane(fd, plane_id);
+	if (!plane) {
+		ERROR_MSG("[PLANE:%u] drmModeGetPlane failed: %s", plane_id,
+				strerror(errno));
+		return FALSE;
 	}
 
-	/* find an unused plane which can be used as a mouse cursor.  Note
-	 * that we cheat a bit, in order to not burn one overlay per crtc,
-	 * and only show the mouse cursor on one crtc at a time
-	 */
-	plane_resources = drmModeGetPlaneResources(drmmode->fd);
-	if (!plane_resources) {
-		ERROR_MSG("drmModeGetPlaneResources failed: %s", strerror(errno));
-		ret = FALSE;
-		goto out;
-	}
+	if (!(plane->possible_crtcs & crtc_mask))
+		goto free_plane;
 
-	if (plane_resources->count_planes < 1) {
-		ERROR_MSG("HW Cursor: not enough planes");
-		drmModeFreePlaneResources(plane_resources);
-		ret = FALSE;
-		goto out;
-	}
+	/* Plane must NOT have a current CRTC or FB */
+	if (plane->crtc_id || plane->fb_id)
+		goto free_plane;
 
-	/* HACK: HW Cursor always uses the first plane */
-	plane_id = plane_resources->planes[0];
-	INFO_MSG("HW Cursor using [PLANE:%u]", plane_id);
-
-	drmModeFreePlaneResources(plane_resources);
-
-	props = drmModeObjectGetProperties(drmmode->fd, plane_id,
-					   DRM_MODE_OBJECT_PLANE);
-	if (!props) {
-		ERROR_MSG("No properties found for DRM [PLANE:%u]", plane_id);
-		ret = FALSE;
-		goto out;
-	}
-
-	/* Find first "zpos" property for our HW Cursor plane */
-	zpos_prop_id = 0;
-	for (i = 0; i < props->count_props && !zpos_prop_id; i++) {
-		uint32_t prop_id = props->props[i];
-		drmModePropertyPtr prop =
-				drmModeGetProperty(drmmode->fd, prop_id);
-		if (!prop) {
-			ERROR_MSG("HW Cursor: Failed to get zpos [PROPERTY:%u] for [PLANE:%u]",
-					prop_id, plane_id);
-			continue;
-		}
-
-		if (!strcmp(prop->name, "zpos"))
-			zpos_prop_id = prop->prop_id;
-		drmModeFreeProperty(prop);
-	}
-	drmModeFreeObjectProperties(props);
-
-	if (!zpos_prop_id) {
-		ERROR_MSG("No 'zpos' property found for [PLANE:%u]", plane_id);
-		ret = FALSE;
-		goto out;
-	}
-
-	rc = drmModeObjectSetProperty(drmmode->fd, plane_id,
-			DRM_MODE_OBJECT_PLANE, zpos_prop_id, 1);
-	if (rc) {
-		ERROR_MSG("HW Cursor: Failed to set zpos [PROPERTY:%u] for [PLANE:%u]",
-				zpos_prop_id, plane_id);
-		ret = FALSE;
-		goto out;
-	}
-
-	cursor = calloc(1, sizeof *cursor);
-	if (!cursor) {
-		ERROR_MSG("HW Cursor allocation failed");
-		ret = FALSE;
-		goto out;
-	}
-	cursor->plane_id = plane_id;
-	cursor->bo = omap_bo_new_with_format(pOMAP->dev, w, h,
-			DRM_FORMAT_ARGB8888, 32);
-	if (!cursor->bo) {
-		ERROR_MSG("error allocating hw cursor buffer");
-		ret = FALSE;
-		goto err_free_cursor;
-	}
-
-	INFO_MSG("HW Cursor using [FB:%u]", omap_bo_fb(cursor->bo));
-
-	drmmode->cursor = cursor;
+	if (!drm_plane_supports_format(plane, DRM_FORMAT_ARGB8888))
+		goto free_plane;
 
 	ret = TRUE;
-	goto out;
 
-err_free_cursor:
-	free(cursor);
-out:
-	TRACE_EXIT();
+free_plane:
+	drmModeFreePlane(plane);
 	return ret;
 }
 
-void
-drmmode_cursor_fini(ScreenPtr pScreen)
+static Bool
+drm_plane_set_zpos(ScrnInfoPtr pScrn, int fd, uint32_t plane_id, uint64_t zpos)
 {
-	ScrnInfoPtr pScrn = xf86ScreenToScrn(pScreen);
-	drmmode_ptr drmmode = drmmode_from_scrn(pScrn);
-	drmmode_cursor_ptr cursor = drmmode->cursor;
+	drmModeObjectPropertiesPtr props;
+	uint32_t prop_id;
+	int rc;
+	Bool ret;
 
-	if (!cursor)
-		return;
+	props = drmModeObjectGetProperties(fd, plane_id,
+			DRM_MODE_OBJECT_PLANE);
+	if (!props) {
+		ERROR_MSG("[PLANE:%u] drmModeObjectGetProperties failed: %s",
+				plane_id, strerror(errno));
+		return FALSE;
+	}
 
-	omap_bo_unreference(cursor->bo);
+	prop_id = drmmode_get_prop_id(fd, props->count_props, props->props,
+			"zpos", DRM_MODE_PROP_RANGE);
+	if (!prop_id) {
+		ERROR_MSG("[PLANE:%u] failed to find zpos enum property",
+				plane_id);
+		ret = FALSE;
+		goto free_properties;
+	}
 
-	free(cursor);
-	drmmode->cursor = NULL;
+	rc = drmModeObjectSetProperty(fd, plane_id, DRM_MODE_OBJECT_PLANE,
+			prop_id, zpos);
+	ret = (rc == 0);
+	if (!ret)
+		ERROR_MSG("[PLANE:%u] failed to set [PROPERTY:%u] = %llu: %s",
+				plane_id, prop_id, zpos, strerror(errno));
+
+free_properties:
+	drmModeFreeObjectProperties(props);
+	return ret;
 }
 
 #ifdef OMAP_SUPPORT_GAMMA
@@ -1100,9 +1033,19 @@ drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 }
 #endif
 
+static void
+drmmode_cursor_destroy(drmmode_cursor_ptr cursor)
+{
+	omap_bo_unreference(cursor->bo);
+	cursor->plane_id = 0;
+}
+
+
 static void drmmode_crtc_destroy(xf86CrtcPtr crtc)
 {
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+
+	drmmode_cursor_destroy(&drmmode_crtc->cursor);
 	free(drmmode_crtc);
 	crtc->driver_private = NULL;
 }
@@ -1121,8 +1064,64 @@ static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 };
 
 static Bool
+drmmode_crtc_cursor_pre_init(ScrnInfoPtr pScrn,
+		drmmode_crtc_private_ptr drmmode_crtc,
+		const drmModePlaneRes *plane_res, int num)
+{
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
+	drmmode_ptr drmmode = drmmode_crtc->drmmode;
+	int fd = drmmode->fd;
+	OMAPPtr pOMAP = OMAPPTR(pScrn);
+	int p;
+	uint32_t plane_id;
+	Bool ret;
+
+	plane_id = 0;
+	for (p = 0; p < plane_res->count_planes && !plane_id; p++) {
+		uint32_t id = plane_res->planes[p];
+
+		if (!drm_plane_can_be_cursor(pScrn, fd, id, num))
+			continue;
+
+		/* Set HW Cursor plane "zpos" property to 1 */
+		ret = drm_plane_set_zpos(pScrn, fd, id, 1);
+		if (!ret) {
+			ERROR_MSG("[CRTC:%u] failed to set zpos for [PLANE:%u]",
+					drmmode_crtc->id, id);
+			continue;
+		}
+
+		plane_id = id;
+	}
+
+	if (!plane_id) {
+		ERROR_MSG("[CRTC:%u] No plane found for HW Cursor",
+				drmmode_crtc->id);
+		ret = FALSE;
+		goto out;
+	}
+
+	cursor->plane_id = plane_id;
+	cursor->bo = omap_bo_new_with_format(pOMAP->dev, CURSORW, CURSORH,
+			DRM_FORMAT_ARGB8888, 32);
+	if (!cursor->bo) {
+		ERROR_MSG("error allocating hw cursor buffer");
+		ret = FALSE;
+		goto out;
+	}
+
+	INFO_MSG("[CRTC:%u] HW Cursor using [PLANE:%u] with [FB:%u] and [BO:%u]",
+			drmmode_crtc->id, plane_id, omap_bo_fb(cursor->bo),
+			omap_bo_handle(cursor->bo));
+
+out:
+	return ret;
+}
+
+static Bool
 drmmode_crtc_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
-		const drmModeResPtr mode_res, int num)
+		const drmModeResPtr mode_res,
+		const drmModePlaneResPtr plane_res, int num)
 {
 	xf86CrtcPtr crtc;
 	drmmode_crtc_private_ptr drmmode_crtc;
@@ -1141,20 +1140,25 @@ drmmode_crtc_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 	drmmode_crtc->id = crtc_id;
 	drmmode_crtc->drmmode = drmmode;
 
+	ret = drmmode_crtc_cursor_pre_init(pScrn, drmmode_crtc, plane_res,
+			num);
+	if (!ret)
+		goto err_free_drmmode_crtc;
+
 	crtc = xf86CrtcCreate(pScrn, &drmmode_crtc_funcs);
 	if (crtc == NULL) {
 		ERROR_MSG("CRTC[%u]: Failed to create xf86Crtc", crtc_id);
 		ret = FALSE;
-		goto err_free_drmmode_crtc;
+		goto err_destroy_cursor;
 	}
-
-	// FIXME - potentially add code to allocate a HW cursor here.
 
 	crtc->driver_private = drmmode_crtc;
 
 	ret = TRUE;
 	goto out;
 
+err_destroy_cursor:
+	drmmode_cursor_destroy(&drmmode_crtc->cursor);
 err_free_drmmode_crtc:
 	free(drmmode_crtc);
 out:
@@ -1722,6 +1726,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 {
 	drmmode_ptr drmmode;
 	drmModeResPtr mode_res;
+	drmModePlaneResPtr plane_res;
 	int i;
 	Bool ret;
 
@@ -1750,17 +1755,27 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 	xf86CrtcSetSizeRange(pScrn, 320, 200, mode_res->max_width,
 			mode_res->max_height);
 
+	plane_res = drmModeGetPlaneResources(fd);
+	if (!plane_res) {
+		ERROR_MSG("drmModeGetPlaneResources failed: %s",
+				strerror(errno));
+		ret = FALSE;
+		goto err_free_drm_resources;
+	}
+	DEBUG_MSG("  %d planes", plane_res->count_planes);
+
 	drmmode = calloc(1, sizeof *drmmode);
 	if (!drmmode) {
 		ERROR_MSG("Failed to allocate drmmode");
 		ret = FALSE;
-		goto err_free_drm_resources;
+		goto err_free_drm_plane_resources;
 	}
 	drmmode->fd = fd;
 
 	ret = TRUE;
 	for (i = 0; i < mode_res->count_crtcs && ret; i++)
-		ret = drmmode_crtc_pre_init(pScrn, drmmode, mode_res, i);
+		ret = drmmode_crtc_pre_init(pScrn, drmmode, mode_res,
+				plane_res, i);
 	if (!ret)
 		goto err_crtcs_destroy;
 
@@ -1775,6 +1790,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 		goto err_outputs_destroy;
 	}
 
+	drmModeFreePlaneResources(plane_res);
 	drmModeFreeResources(mode_res);
 	goto out;
 
@@ -1783,6 +1799,8 @@ err_outputs_destroy:
 err_crtcs_destroy:
 	drmmode_crtcs_destroy(pScrn);
 	free(drmmode);
+err_free_drm_plane_resources:
+	drmModeFreePlaneResources(plane_res);
 err_free_drm_resources:
 	drmModeFreeResources(mode_res);
 out:

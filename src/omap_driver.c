@@ -702,10 +702,6 @@ OMAPScreenInit(SCREEN_INIT_ARGS_DECL)
 	/* Initialize the cursor: */
 	miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
 
-	if (!drmmode_cursor_init(pScreen)) {
-		ERROR_MSG("Hardware cursor initialization failed");
-	}
-
 	/* XXX -- Is this the right place for this?  The Intel i830 driver says:
 	 * "Must force it before EnterVT, so we are in control of VT..."
 	 */
@@ -785,11 +781,8 @@ OMAPCloseScreen(CLOSE_SCREEN_ARGS_DECL)
 
 	drmmode_close_screen(pScrn);
 
-	if (pScrn->vtSema == TRUE) {
+	if (pScrn->vtSema == TRUE)
 		OMAPLeaveVT(VT_FUNC_ARGS(0));
-	}
-
-	drmmode_cursor_fini(pScreen);
 
 	unwrap(pOMAP, pScreen, CloseScreen);
 
