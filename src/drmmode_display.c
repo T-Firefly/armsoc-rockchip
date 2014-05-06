@@ -125,11 +125,31 @@ typedef struct {
 	int id;
 	drmModeConnectorPtr mode_output;
 	drmModePropertyBlobPtr edid_blob;
+	uint32_t dpms_id;
 	int num_props;
 	drmmode_prop_ptr props;
 } drmmode_output_private_rec, *drmmode_output_private_ptr;
 
 static void drmmode_output_dpms(xf86OutputPtr output, int mode);
+
+static uint32_t
+drmmode_get_prop_id(int fd, uint32_t count_props, const uint32_t props[],
+		const char *name, uint32_t flags)
+{
+	uint32_t i;
+	uint32_t prop_id;
+
+	for (prop_id = 0, i = 0; i < count_props && !prop_id; i++) {
+		drmModePropertyPtr prop = drmModeGetProperty(fd, props[i]);
+		if (!prop)
+			continue;
+		if (prop->flags == flags && !strcmp(prop->name, name))
+			prop_id = props[i];
+		drmModeFreeProperty(prop);
+	}
+
+	return prop_id;
+}
 
 static OMAPScanoutPtr
 drmmode_scanout_from_size(OMAPScanoutPtr scanouts, int x, int y, int width,
@@ -1252,26 +1272,19 @@ drmmode_output_destroy(xf86OutputPtr output)
 static void
 drmmode_output_dpms(xf86OutputPtr output, int mode)
 {
+	ScrnInfoPtr pScrn = output->scrn;
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
-	drmModeConnectorPtr koutput = drmmode_output->mode_output;
 	drmmode_ptr drmmode = drmmode_output->drmmode;
-	int i;
-	uint32_t dpms_prop_id = 0;
+	int ret;
 
-	for (i = 0; i < koutput->count_props && !dpms_prop_id; i++) {
-		drmModePropertyPtr prop;
-		prop = drmModeGetProperty(drmmode->fd, koutput->props[i]);
-		if (!prop)
-			continue;
-		if ((prop->flags & DRM_MODE_PROP_ENUM) &&
-		    !strcmp(prop->name, "DPMS"))
-			dpms_prop_id = koutput->props[i];
-		drmModeFreeProperty(prop);
-	}
+	if (!drmmode_output->dpms_id)
+		return;
 
-	if (dpms_prop_id)
-		drmModeConnectorSetProperty(drmmode->fd, drmmode_output->id,
-				dpms_prop_id, mode);
+	ret = drmModeConnectorSetProperty(drmmode->fd, drmmode_output->id,
+			drmmode_output->dpms_id, mode);
+	if (ret)
+		ERROR_MSG("[CONNECTOR:%u] Failed to set [DPMS:%u]",
+				drmmode_output->id, mode);
 }
 
 static Bool
@@ -1585,6 +1598,9 @@ drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 	drmmode_output->id = connector_id;
 	drmmode_output->mode_output = koutput;
 	drmmode_output->drmmode = drmmode;
+	drmmode_output->dpms_id = drmmode_get_prop_id(drmmode->fd,
+			koutput->count_props, koutput->props,
+			"DPMS", DRM_MODE_PROP_ENUM);
 
 	output = xf86OutputCreate(pScrn, &drmmode_output_funcs, name);
 	if (!output) {
