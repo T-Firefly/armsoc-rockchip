@@ -1097,7 +1097,15 @@ drmmode_gamma_set(xf86CrtcPtr crtc, CARD16 *red, CARD16 *green, CARD16 *blue,
 }
 #endif
 
+static void drmmode_crtc_destroy(xf86CrtcPtr crtc)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	free(drmmode_crtc);
+	crtc->driver_private = NULL;
+}
+
 static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
+		.destroy = drmmode_crtc_destroy,
 		.dpms = drmmode_crtc_dpms,
 		.set_mode_major = drmmode_set_mode_major,
 		.set_cursor_position = drmmode_set_cursor_position,
@@ -1109,31 +1117,46 @@ static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 #endif
 };
 
-
-static void
+static Bool
 drmmode_crtc_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 		const drmModeResPtr mode_res, int num)
 {
 	xf86CrtcPtr crtc;
 	drmmode_crtc_private_ptr drmmode_crtc;
+	Bool ret;
 	uint32_t crtc_id = mode_res->crtcs[num];
 
 	TRACE_ENTER();
 
-	crtc = xf86CrtcCreate(pScrn, &drmmode_crtc_funcs);
-	if (crtc == NULL)
-		return;
-
-	drmmode_crtc = xnfcalloc(1, sizeof *drmmode_crtc);
+	drmmode_crtc = calloc(1, sizeof *drmmode_crtc);
+	if (!drmmode_crtc) {
+		ERROR_MSG("CRTC[%u]: Failed to allocate drmmode_crtc",
+				crtc_id);
+		ret = FALSE;
+		goto out;
+	}
 	drmmode_crtc->id = crtc_id;
 	drmmode_crtc->drmmode = drmmode;
+
+	crtc = xf86CrtcCreate(pScrn, &drmmode_crtc_funcs);
+	if (crtc == NULL) {
+		ERROR_MSG("CRTC[%u]: Failed to create xf86Crtc", crtc_id);
+		ret = FALSE;
+		goto err_free_drmmode_crtc;
+	}
 
 	// FIXME - potentially add code to allocate a HW cursor here.
 
 	crtc->driver_private = drmmode_crtc;
 
+	ret = TRUE;
+	goto out;
+
+err_free_drmmode_crtc:
+	free(drmmode_crtc);
+out:
 	TRACE_EXIT();
-	return;
+	return ret;
 }
 
 static xf86OutputStatus
@@ -1523,7 +1546,7 @@ const char *output_names[] = { "None",
 };
 #define NUM_OUTPUT_NAMES (sizeof(output_names) / sizeof(output_names[0]))
 
-static void
+static Bool
 drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 		const drmModeResPtr mode_res, int num)
 {
@@ -1535,11 +1558,17 @@ drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 	CARD32 possible_crtcs, possible_clones;
 	uint32_t connector_id = mode_res->connectors[num];
 
+	Bool ret;
+
 	TRACE_ENTER();
 
 	koutput = drmModeGetConnector(drmmode->fd, connector_id);
-	if (!koutput)
-		return;
+	if (!koutput) {
+		ERROR_MSG("[CONNECTOR:%u] Failed drmModeGetConnector",
+				connector_id);
+		ret = FALSE;
+		goto out;
+	}
 
 	/*
 	 * Fetch possible clones and crtcs from this connector's encoder.
@@ -1548,8 +1577,10 @@ drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 	 */
 	kencoder = drmModeGetEncoder(drmmode->fd, koutput->encoders[0]);
 	if (!kencoder) {
-		drmModeFreeConnector(koutput);
-		return;
+		ERROR_MSG("[CONNECTOR:%u] Failed drmModeGetEncoder",
+				connector_id);
+		ret = FALSE;
+		goto err_free_drm_mode_connector;
 	}
 
 	possible_crtcs = kencoder->possible_crtcs;
@@ -1564,22 +1595,25 @@ drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 				output_names[koutput->connector_type],
 				koutput->connector_type_id);
 
-	output = xf86OutputCreate(pScrn, &drmmode_output_funcs, name);
-	if (!output) {
-		drmModeFreeConnector(koutput);
-		return;
-	}
-
 	drmmode_output = calloc(1, sizeof *drmmode_output);
 	if (!drmmode_output) {
-		xf86OutputDestroy(output);
-		drmModeFreeConnector(koutput);
-		return;
+		ERROR_MSG("[CONNECTOR:%u] Failed to allocate drmmode_output",
+				connector_id);
+		ret = FALSE;
+		goto err_free_drm_mode_connector;
 	}
 
 	drmmode_output->id = connector_id;
 	drmmode_output->mode_output = koutput;
 	drmmode_output->drmmode = drmmode;
+
+	output = xf86OutputCreate(pScrn, &drmmode_output_funcs, name);
+	if (!output) {
+		ERROR_MSG("[CONNECTOR:%u] Failed xf86OutputCreate",
+				connector_id);
+		ret = FALSE;
+		goto err_free_drmmode_output;
+	}
 
 	output->mm_width = koutput->mmWidth;
 	output->mm_height = koutput->mmHeight;
@@ -1589,8 +1623,16 @@ drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
 	output->possible_clones = possible_clones;
 	output->interlaceAllowed = TRUE;
 
+	ret = TRUE;
+	goto out;
+
+err_free_drmmode_output:
+	free(drmmode_output);
+err_free_drm_mode_connector:
+	drmModeFreeConnector(koutput);
+out:
 	TRACE_EXIT();
-	return;
+	return ret;
 }
 
 static Bool
@@ -1649,25 +1691,55 @@ static const xf86CrtcConfigFuncsRec drmmode_xf86crtc_config_funcs = {
 		.resize = drmmode_xf86crtc_resize
 };
 
+static void drmmode_crtcs_destroy(ScrnInfoPtr pScrn)
+{
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+
+	/*
+	 * xf86CrtcDestroy() removes crtc from list and memmoves the other
+	 * entries, and decrements num_crtc.
+	 * Hence, as an optimization, we work backwards num_crtc.
+	 */
+	while (xf86_config->num_crtc) {
+		int c = xf86_config->num_crtc - 1;
+		xf86CrtcPtr crtc = xf86_config->crtc[c];
+		xf86CrtcDestroy(crtc);
+	}
+}
+
+static void drmmode_outputs_destroy(ScrnInfoPtr pScrn)
+{
+	xf86CrtcConfigPtr xf86_config = XF86_CRTC_CONFIG_PTR(pScrn);
+
+	/*
+	 * xf86OutputDestroy() removes output from list and memmoves the other
+	 * entries, and decrements num_output.
+	 * Hence, as an optimization, we work backwards num_output.
+	 */
+	while (xf86_config->num_output) {
+		int o = xf86_config->num_output - 1;
+		xf86OutputPtr output = xf86_config->output[o];
+		xf86OutputDestroy(output);
+	}
+}
 
 Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 {
 	drmmode_ptr drmmode;
 	drmModeResPtr mode_res;
 	int i;
+	Bool ret;
 
 	TRACE_ENTER();
 
 	pScrn->canDoBGNoneRoot = TRUE;
 
-	drmmode = calloc(1, sizeof *drmmode);
-	drmmode->fd = fd;
-
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
-	mode_res = drmModeGetResources(drmmode->fd);
+	mode_res = drmModeGetResources(fd);
 	if (!mode_res) {
-		return FALSE;
+		ret = FALSE;
+		goto out;
 	}
 	DEBUG_MSG("Got KMS resources");
 	DEBUG_MSG("  %d connectors, %d encoders",
@@ -1682,19 +1754,45 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 
 	xf86CrtcSetSizeRange(pScrn, 320, 200, mode_res->max_width,
 			mode_res->max_height);
-	for (i = 0; i < mode_res->count_crtcs; i++)
-		drmmode_crtc_pre_init(pScrn, drmmode, mode_res, i);
 
-	for (i = 0; i < mode_res->count_connectors; i++)
-		drmmode_output_pre_init(pScrn, drmmode, mode_res, i);
+	drmmode = calloc(1, sizeof *drmmode);
+	if (!drmmode) {
+		ERROR_MSG("Failed to allocate drmmode");
+		ret = FALSE;
+		goto err_free_drm_resources;
+	}
+	drmmode->fd = fd;
 
-	xf86InitialConfiguration(pScrn, TRUE);
+	ret = TRUE;
+	for (i = 0; i < mode_res->count_crtcs && ret; i++)
+		ret = drmmode_crtc_pre_init(pScrn, drmmode, mode_res, i);
+	if (!ret)
+		goto err_crtcs_destroy;
+
+	for (i = 0; i < mode_res->count_connectors && ret; i++)
+		ret = drmmode_output_pre_init(pScrn, drmmode, mode_res, i);
+	if (!ret)
+		goto err_outputs_destroy;
+
+	ret = xf86InitialConfiguration(pScrn, TRUE);
+	if (!ret) {
+		ERROR_MSG("xf86 Initial Configuration failed");
+		goto err_outputs_destroy;
+	}
 
 	drmModeFreeResources(mode_res);
+	goto out;
 
+err_outputs_destroy:
+	drmmode_outputs_destroy(pScrn);
+err_crtcs_destroy:
+	drmmode_crtcs_destroy(pScrn);
+	free(drmmode);
+err_free_drm_resources:
+	drmModeFreeResources(mode_res);
+out:
 	TRACE_EXIT();
-
-	return TRUE;
+	return ret;
 }
 
 void
@@ -1941,8 +2039,10 @@ drmmode_screen_init(ScrnInfoPtr pScrn)
 	/* Register a wakeup handler to get informed on DRM events */
 	ret = RegisterBlockAndWakeupHandlers((BlockHandlerProcPtr)NoopDDA,
 			drmmode_wakeup_handler, pScrn);
-	if (!ret)
+	if (!ret) {
+		ERROR_MSG("RegisterBlockAndWakeupHandlers() failed");
 		goto err_drmmode_uevent_fini;
+	}
 
 	goto out;
 
