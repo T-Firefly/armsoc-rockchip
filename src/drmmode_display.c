@@ -102,7 +102,6 @@ typedef struct {
 
 typedef struct {
 	int fd;
-	drmModeResPtr mode_res;
 	struct udev_monitor *uevent_monitor;
 	InputHandlerProc uevent_handler;
 	drmmode_cursor_ptr cursor;
@@ -125,7 +124,7 @@ typedef struct {
 
 typedef struct {
 	drmmode_ptr drmmode;
-	int output_id;
+	int id;
 	drmModeConnectorPtr mode_output;
 	drmModePropertyBlobPtr edid_blob;
 	int num_props;
@@ -349,8 +348,7 @@ drmmode_set_crtc(ScrnInfoPtr pScrn, xf86CrtcPtr crtc, struct omap_bo *bo, int x,
 		if (output->crtc != crtc)
 			continue;
 
-		output_ids[output_count]
-			= drmmode_output->mode_output->connector_id;
+		output_ids[output_count] = drmmode_output->id;
 		output_count++;
 	}
 	if (!output_count) {
@@ -1107,10 +1105,12 @@ static const xf86CrtcFuncsRec drmmode_crtc_funcs = {
 
 
 static void
-drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
+drmmode_crtc_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
+		const drmModeResPtr mode_res, int num)
 {
 	xf86CrtcPtr crtc;
 	drmmode_crtc_private_ptr drmmode_crtc;
+	uint32_t crtc_id = mode_res->crtcs[num];
 
 	TRACE_ENTER();
 
@@ -1119,7 +1119,7 @@ drmmode_crtc_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 		return;
 
 	drmmode_crtc = xnfcalloc(1, sizeof *drmmode_crtc);
-	drmmode_crtc->id = drmmode->mode_res->crtcs[num];
+	drmmode_crtc->id = crtc_id;
 	drmmode_crtc->drmmode = drmmode;
 
 	// FIXME - potentially add code to allocate a HW cursor here.
@@ -1140,7 +1140,7 @@ drmmode_output_detect(xf86OutputPtr output)
 	drmModeFreeConnector(drmmode_output->mode_output);
 
 	drmmode_output->mode_output =
-			drmModeGetConnector(drmmode->fd, drmmode_output->output_id);
+			drmModeGetConnector(drmmode->fd, drmmode_output->id);
 
 	switch (drmmode_output->mode_output->connection) {
 	case DRM_MODE_CONNECTED:
@@ -1262,8 +1262,8 @@ drmmode_output_dpms(xf86OutputPtr output, int mode)
 	if (mode_id < 0)
 		return;
 
-	drmModeConnectorSetProperty(drmmode->fd, koutput->connector_id,
-			mode_id, mode);
+	drmModeConnectorSetProperty(drmmode->fd, drmmode_output->id, mode_id,
+			mode);
 }
 
 static Bool
@@ -1395,7 +1395,8 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 				return FALSE;
 			val = *(uint32_t *)value->data;
 
-			ret = drmModeConnectorSetProperty(drmmode->fd, drmmode_output->output_id,
+			ret = drmModeConnectorSetProperty(drmmode->fd,
+					drmmode_output->id,
 					p->mode_prop->prop_id, (uint64_t)val);
 
 			if (ret)
@@ -1419,7 +1420,7 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 			for (j = 0; j < p->mode_prop->count_enums; j++) {
 				if (!strcmp(p->mode_prop->enums[j].name, name)) {
 					ret = drmModeConnectorSetProperty(drmmode->fd,
-							drmmode_output->output_id,
+							drmmode_output->id,
 							p->mode_prop->prop_id,
 							p->mode_prop->enums[j].value);
 
@@ -1448,8 +1449,8 @@ drmmode_output_get_property(xf86OutputPtr output, Atom property)
 
 	if (output->scrn->vtSema) {
 		drmModeFreeConnector(drmmode_output->mode_output);
-		drmmode_output->mode_output =
-				drmModeGetConnector(drmmode->fd, drmmode_output->output_id);
+		drmmode_output->mode_output = drmModeGetConnector(drmmode->fd,
+				drmmode_output->id);
 	}
 
 	for (i = 0; i < drmmode_output->num_props; i++) {
@@ -1517,7 +1518,8 @@ const char *output_names[] = { "None",
 #define NUM_OUTPUT_NAMES (sizeof(output_names) / sizeof(output_names[0]))
 
 static void
-drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
+drmmode_output_pre_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode,
+		const drmModeResPtr mode_res, int num)
 {
 	xf86OutputPtr output;
 	drmModeConnectorPtr koutput;
@@ -1525,11 +1527,11 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 	drmmode_output_private_ptr drmmode_output;
 	char name[32];
 	CARD32 possible_crtcs, possible_clones;
+	uint32_t connector_id = mode_res->connectors[num];
 
 	TRACE_ENTER();
 
-	koutput = drmModeGetConnector(drmmode->fd,
-			drmmode->mode_res->connectors[num]);
+	koutput = drmModeGetConnector(drmmode->fd, connector_id);
 	if (!koutput)
 		return;
 
@@ -1569,7 +1571,7 @@ drmmode_output_init(ScrnInfoPtr pScrn, drmmode_ptr drmmode, int num)
 		return;
 	}
 
-	drmmode_output->output_id = drmmode->mode_res->connectors[num];
+	drmmode_output->id = connector_id;
 	drmmode_output->mode_output = koutput;
 	drmmode_output->drmmode = drmmode;
 
@@ -1645,6 +1647,7 @@ static const xf86CrtcConfigFuncsRec drmmode_xf86crtc_config_funcs = {
 Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 {
 	drmmode_ptr drmmode;
+	drmModeResPtr mode_res;
 	int i;
 
 	TRACE_ENTER();
@@ -1656,30 +1659,32 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
-	drmmode->mode_res = drmModeGetResources(drmmode->fd);
-	if (!drmmode->mode_res) {
+	mode_res = drmModeGetResources(drmmode->fd);
+	if (!mode_res) {
 		return FALSE;
-	} else {
-		DEBUG_MSG("Got KMS resources");
-		DEBUG_MSG("  %d connectors, %d encoders",
-				drmmode->mode_res->count_connectors,
-				drmmode->mode_res->count_encoders);
-		DEBUG_MSG("  %d crtcs, %d fbs",
-				drmmode->mode_res->count_crtcs, drmmode->mode_res->count_fbs);
-		DEBUG_MSG("  %dx%d minimum resolution",
-				drmmode->mode_res->min_width, drmmode->mode_res->min_height);
-		DEBUG_MSG("  %dx%d maximum resolution",
-				drmmode->mode_res->max_width, drmmode->mode_res->max_height);
 	}
-	xf86CrtcSetSizeRange(pScrn, 320, 200, drmmode->mode_res->max_width,
-			drmmode->mode_res->max_height);
-	for (i = 0; i < drmmode->mode_res->count_crtcs; i++)
-		drmmode_crtc_init(pScrn, drmmode, i);
+	DEBUG_MSG("Got KMS resources");
+	DEBUG_MSG("  %d connectors, %d encoders",
+			mode_res->count_connectors,
+			mode_res->count_encoders);
+	DEBUG_MSG("  %d crtcs, %d fbs",
+			mode_res->count_crtcs, mode_res->count_fbs);
+	DEBUG_MSG("  %dx%d minimum resolution",
+			mode_res->min_width, mode_res->min_height);
+	DEBUG_MSG("  %dx%d maximum resolution",
+			mode_res->max_width, mode_res->max_height);
 
-	for (i = 0; i < drmmode->mode_res->count_connectors; i++)
-		drmmode_output_init(pScrn, drmmode, i);
+	xf86CrtcSetSizeRange(pScrn, 320, 200, mode_res->max_width,
+			mode_res->max_height);
+	for (i = 0; i < mode_res->count_crtcs; i++)
+		drmmode_crtc_pre_init(pScrn, drmmode, mode_res, i);
+
+	for (i = 0; i < mode_res->count_connectors; i++)
+		drmmode_output_pre_init(pScrn, drmmode, mode_res, i);
 
 	xf86InitialConfiguration(pScrn, TRUE);
+
+	drmModeFreeResources(mode_res);
 
 	TRACE_EXIT();
 
