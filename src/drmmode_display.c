@@ -96,7 +96,6 @@ typedef struct {
 	/* hardware cursor: */
 	uint32_t plane_id;
 	struct omap_bo *bo;
-	uint32_t zpos_prop_id;
 	int x, y;
 } drmmode_cursor_rec, *drmmode_cursor_ptr;
 
@@ -891,10 +890,6 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 	if (!cursor)
 		return;
 
-	drmModeObjectSetProperty(drmmode->fd, cursor->plane_id,
-				 DRM_MODE_OBJECT_PLANE,
-				 cursor->zpos_prop_id, 1);
-
 	drmmode_set_cursor_position(crtc, cursor->x, cursor->y);
 }
 
@@ -939,6 +934,7 @@ drmmode_cursor_init(ScreenPtr pScreen)
 	int i;
 	uint32_t plane_id;
 	uint32_t zpos_prop_id;
+	int rc;
 	Bool ret;
 
 	/* technically we probably don't have any size limit.. since we
@@ -1012,13 +1008,21 @@ drmmode_cursor_init(ScreenPtr pScreen)
 		goto out;
 	}
 
+	rc = drmModeObjectSetProperty(drmmode->fd, plane_id,
+			DRM_MODE_OBJECT_PLANE, zpos_prop_id, 1);
+	if (rc) {
+		ERROR_MSG("HW Cursor: Failed to set zpos [PROPERTY:%u] for [PLANE:%u]",
+				zpos_prop_id, plane_id);
+		ret = FALSE;
+		goto out;
+	}
+
 	cursor = calloc(1, sizeof *cursor);
 	if (!cursor) {
 		ERROR_MSG("HW Cursor allocation failed");
 		ret = FALSE;
 		goto out;
 	}
-	cursor->zpos_prop_id = zpos_prop_id;
 	cursor->plane_id = plane_id;
 	cursor->bo = omap_bo_new_with_format(pOMAP->dev, w, h,
 			DRM_FORMAT_ARGB8888, 32);
