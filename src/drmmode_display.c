@@ -997,9 +997,9 @@ drm_plane_set_zpos(ScrnInfoPtr pScrn, int fd, uint32_t plane_id, uint64_t zpos)
 	prop_id = drmmode_get_prop_id(fd, props->count_props, props->props,
 			"zpos", DRM_MODE_PROP_RANGE);
 	if (!prop_id) {
-		ERROR_MSG("[PLANE:%u] failed to find zpos enum property",
+		INFO_MSG("[PLANE:%u] failed to find zpos property, skip it",
 				plane_id);
-		ret = FALSE;
+		ret = TRUE;
 		goto free_properties;
 	}
 
