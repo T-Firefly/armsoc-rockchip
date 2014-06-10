@@ -841,7 +841,7 @@ done:
 #define CURSORPAD 16
 
 static void
-drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
+drmmode_set_plane(xf86CrtcPtr crtc)
 {
 	ScrnInfoPtr pScrn = crtc->scrn;
 	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
@@ -850,23 +850,6 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 	int32_t crtc_x, crtc_y;
 	uint32_t src_w, src_h;
 	int ret;
-
-	if (!cursor)
-		return;
-
-	cursor->x = x;
-	cursor->y = y;
-
-	/*
-	 * When using drm planes, "show cursor" and "set cursor position" are
-	 * the same thing: drmModeSetPlane().
-	 * xf86 will call ->show_cursor() after ->set_cursor_position() if
-	 * crtc->cursor_shown == FALSE.
-	 * So, we check here to ensure we don't call drmModeSetPlane() twice in
-	 * that case.
-	 */
-	if (!crtc->cursor_shown)
-		return;
 
 	crtc_x = cursor->x - CURSORPAD;
 	crtc_y = cursor->y;
@@ -880,6 +863,29 @@ drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
 			crtc_x, crtc_y, CURSORW, CURSORH, 0, 0, src_w, src_h);
 	if (ret)
 		ERROR_MSG("Failed to update cursor plane");
+}
+
+static void
+drmmode_set_cursor_position(xf86CrtcPtr crtc, int x, int y)
+{
+	drmmode_crtc_private_ptr drmmode_crtc = crtc->driver_private;
+	drmmode_cursor_ptr cursor = &drmmode_crtc->cursor;
+
+	if (!cursor)
+		return;
+
+	cursor->x = x;
+	cursor->y = y;
+
+	/*
+	 * When using drm planes it is not possible to update a hidden cursor's
+	 * position since drmModeSetPlane() always makes a plane visible. So,
+	 * only call set the cursor plane if the cursor is currently visible.
+	 * If the plane is currently hidden, xf86 will unhide it later by
+	 * calling ->show_cursor().
+	 */
+	if (crtc->cursor_shown)
+		drmmode_set_plane(crtc);
 }
 
 static void
@@ -906,7 +912,7 @@ drmmode_show_cursor(xf86CrtcPtr crtc)
 	if (!cursor)
 		return;
 
-	drmmode_set_cursor_position(crtc, cursor->x, cursor->y);
+	drmmode_set_plane(crtc);
 }
 
 static void
