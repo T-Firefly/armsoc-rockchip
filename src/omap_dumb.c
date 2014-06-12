@@ -53,6 +53,7 @@ struct omap_bo {
 	int refcnt;
 	int acquired_exclusive;
 	int acquire_cnt;
+	int dirty;
 };
 
 enum {
@@ -178,6 +179,7 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	new_buf->refcnt = 1;
 	new_buf->acquired_exclusive = 0;
 	new_buf->acquire_cnt = 0;
+	new_buf->dirty = TRUE;
 
 	return new_buf;
 
@@ -338,17 +340,22 @@ int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 		bo->acquire_cnt++;
 		return 0;
 	}
-	bo->acquired_exclusive = op & OMAP_GEM_WRITE;
-	bo->acquire_cnt++;
 	acquire.handle = bo->exynos_bo->handle;
 	acquire.flags = (op & OMAP_GEM_WRITE)
 		? DRM_EXYNOS_GEM_CPU_ACQUIRE_EXCLUSIVE
 		: DRM_EXYNOS_GEM_CPU_ACQUIRE_SHARED;
 	ret = drmIoctl(bo->dev->exynos_dev.fd, DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE,
 			&acquire);
-	if (ret)
+	if (ret) {
 		ERROR_MSG("DRM_IOCTL_EXYNOS_GEM_CPU_ACQUIRE failed: %s",
 				strerror(errno));
+	} else {
+		bo->acquired_exclusive = op & OMAP_GEM_WRITE;
+		bo->acquire_cnt++;
+		if (bo->acquired_exclusive) {
+			bo->dirty = TRUE;
+		}
+	}
 	return ret;
 }
 
@@ -371,3 +378,14 @@ int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 				strerror(errno));
 	return ret;
 }
+
+int omap_bo_get_dirty(struct omap_bo *bo)
+{
+	return bo->dirty;
+}
+
+void omap_bo_clear_dirty(struct omap_bo *bo)
+{
+	bo->dirty = FALSE;
+}
+

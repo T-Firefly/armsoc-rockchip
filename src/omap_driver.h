@@ -76,6 +76,7 @@ enum OMAP_CHIPSET {
 /*#define OMAP_SUPPORT_GAMMA		1 -- Not supported on exynos*/
 
 #define MAX_SCANOUTS		3
+#define DRI2_ARMSOC_PRIVATE_CRC_DIRTY 1 /* DRI2 private buffer flag */
 
 typedef struct _OMAPScanout
 {

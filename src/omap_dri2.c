@@ -240,7 +240,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	DRIBUF(buf)->pitch = exaGetPixmapPitch(pPixmap);
 	DRIBUF(buf)->cpp = pPixmap->drawable.bitsPerPixel / 8;
 	DRIBUF(buf)->format = format;
-	DRIBUF(buf)->flags = 0;
+	DRIBUF(buf)->flags = omap_bo_get_dirty(bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
 	buf->pPixmap = pPixmap;
 	buf->previous_canflip = -1;
 
@@ -518,6 +518,8 @@ OMAPDRI2ScheduleSwap(ClientPtr client, DrawablePtr pDraw,
 	src_priv = exaGetPixmapDriverPrivate(src->pPixmap);
 	dst_priv = exaGetPixmapDriverPrivate(dst->pPixmap);
 
+	/* src bo was just rendered to by GPU so it is not dirty */
+	omap_bo_clear_dirty(src_priv->bo);
 	new_canflip = canflip(pDraw, src_priv->bo);
 
 	/* If we can flip using a crtc scanout, switch the front buffer bo */
@@ -677,6 +679,7 @@ OMAPDRI2ReuseBufferNotify(DrawablePtr pDraw, DRI2BufferPtr buffer)
 	OMAPPixmapPrivPtr omap_priv = exaGetPixmapDriverPrivate(pPixmap);
 
 	buffer->name = omap_bo_get_name(omap_priv->bo);
+	buffer->flags = omap_bo_get_dirty(omap_priv->bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
 }
 
 /**

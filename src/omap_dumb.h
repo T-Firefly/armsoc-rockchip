@@ -44,6 +44,8 @@ void *omap_bo_map(struct omap_bo *bo);
 
 int omap_bo_cpu_prep(struct omap_bo *bo, enum omap_gem_op op);
 int omap_bo_cpu_fini(struct omap_bo *bo, enum omap_gem_op op);
+int omap_bo_get_dirty(struct omap_bo *bo);
+void omap_bo_clear_dirty(struct omap_bo *bo);
 
 struct omap_bo *omap_bo_new_with_depth(struct omap_device *dev, uint32_t width,
 		uint32_t height, uint8_t depth, uint8_t bpp);
