@@ -34,12 +34,13 @@ ERROR_CFLAGS = -Werror -Wall -Wdeclaration-after-statement -Wvla \
 	-Wwrite-strings -Wformat-nonliteral  -Wformat-security \
 	-Wold-style-definition -Winit-self -Wmissing-include-dirs \
 	-Waddress -Waggregate-return -Wno-multichar -Wnested-externs
- 
+
 AM_CFLAGS = @XORG_CFLAGS@ @DRM_CFLAGS@ $(ERROR_CFLAGS)
 armsoc_drv_la_LTLIBRARIES = armsoc_drv.la
 armsoc_drv_la_LDFLAGS = -module -avoid-version -no-undefined
 armsoc_drv_la_LIBADD = @XORG_LIBS@ @DRM_LIBS@
 armsoc_drv_ladir = @moduledir@/drivers
+BO_SRCS = bo_@driver@.c
 
 armsoc_drv_la_SOURCES = \
          drmmode_display.c \
@@ -47,4 +48,5 @@ armsoc_drv_la_SOURCES = \
          omap_exa_null.c \
          omap_dri2.c \
          omap_driver.c \
-         omap_dumb.c
+         omap_dumb.c \
+         $(BO_SRCS)

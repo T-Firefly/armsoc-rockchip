@@ -25,6 +25,7 @@
 #define OMAP_DUMB_H_
 
 #include <stdint.h>
+#include "bo.h"
 
 struct omap_bo;
 struct omap_device;
@@ -32,6 +33,30 @@ struct omap_device;
 enum omap_gem_op {
 	OMAP_GEM_READ = 0x01,
 	OMAP_GEM_WRITE = 0x02,
+};
+
+struct omap_device {
+	int fd;
+	void *bo_dev;
+	const struct bo_ops *ops;
+	ScrnInfoPtr pScrn;
+};
+
+struct omap_bo {
+	struct omap_device *dev;
+	void *priv_bo;
+	uint32_t handle;
+	uint32_t fb_id;
+	uint32_t width;
+	uint32_t height;
+	uint32_t pitch;
+	uint8_t depth;
+	uint8_t bpp;
+	uint32_t pixel_format;
+	int refcnt;
+	int acquired_exclusive;
+	int acquire_cnt;
+	int dirty;
 };
 
 struct omap_device *omap_device_new(int fd, ScrnInfoPtr pScrn);

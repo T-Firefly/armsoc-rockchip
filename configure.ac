@@ -60,6 +60,15 @@ AC_ARG_WITH(xorg-module-dir,
             [moduledir="$withval"],
             [moduledir="$libdir/xorg/modules"])
 
+AC_MSG_CHECKING([which DRM driver to use])
+AC_ARG_WITH(driver,
+            AS_HELP_STRING([--with-driver],
+                          [driver need select one : rockchip exynos]),
+            [driver="$withval"],
+            AC_MSG_FAILURE([You must specify which DRM driver to build for - see README]))
+AC_MSG_RESULT([$driver])
+AC_SUBST(driver)
+
 # Checks for extensions
 XORG_DRIVER_CHECK_EXT(RANDR, randrproto)
 XORG_DRIVER_CHECK_EXT(RENDER, renderproto)
@@ -68,7 +77,14 @@ XORG_DRIVER_CHECK_EXT(DPMSExtension, xextproto)
 # Checks for pkg-config packages
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto fontsproto dri2proto $REQUIRED_MODULES)
 PKG_CHECK_MODULES(XEXT, [xextproto >= 7.0.99.1])
-PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libdrm_exynos >= 0.6])
+
+if test "x${driver}" == "xexynos"; then
+    PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libdrm_exynos >= 0.6])
+fi
+
+if test "x${driver}" == "xrockchip"; then
+    PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libdrm_rockchip >= 0.1])
+fi
 
 # Checks for header files.
 AC_HEADER_STDC
