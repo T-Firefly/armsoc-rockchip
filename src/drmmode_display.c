@@ -1080,7 +1080,7 @@ drmmode_crtc_cursor_pre_init(ScrnInfoPtr pScrn,
 	OMAPPtr pOMAP = OMAPPTR(pScrn);
 	int p;
 	uint32_t plane_id;
-	Bool ret;
+	Bool ret = TRUE;  /* Silence a may-be-used-uninitialized warning. */
 
 	plane_id = 0;
 	for (p = 0; p < plane_res->count_planes && !plane_id; p++) {
