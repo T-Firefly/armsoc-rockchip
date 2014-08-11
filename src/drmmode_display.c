@@ -1475,53 +1475,44 @@ drmmode_output_get_property(xf86OutputPtr output, Atom property)
 
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
 	drmmode_ptr drmmode = drmmode_output->drmmode;
-	drmmode_prop_ptr p = NULL;
-	drmModePropertyPtr prop;
 	uint32_t value;
 	int err, i;
 
-	for (i = 0; i < drmmode_output->num_props; i++) {
-		p = &drmmode_output->props[i];
-		if (p->atoms[0] == property)
-			break;
-	}
-	if (i == drmmode_output->num_props)
-		return FALSE;
-
 	if (output->scrn->vtSema) {
-		prop = drmModeGetProperty(drmmode->fd, p->mode_prop->prop_id);
-		if (!prop)
-			return FALSE;
-
-		drmmode_output->mode_output->prop_values[p->index] =
-				prop->values[0];
-
-		drmModeFreeProperty(prop);
+		drmModeFreeConnector(drmmode_output->mode_output);
+		drmmode_output->mode_output = drmModeGetConnector(drmmode->fd,
+				drmmode_output->id);
 	}
 
-	value = drmmode_output->mode_output->prop_values[p->index];
+	for (i = 0; i < drmmode_output->num_props; i++) {
+		drmmode_prop_ptr p = &drmmode_output->props[i];
+		if (p->atoms[0] != property)
+			continue;
 
-	if (p->mode_prop->flags & DRM_MODE_PROP_RANGE) {
-		err = RRChangeOutputProperty(output->randr_output,
-				property, XA_INTEGER, 32,
-				PropModeReplace, 1, &value,
-				FALSE, FALSE);
+		value = drmmode_output->mode_output->prop_values[p->index];
 
-		return !err;
-	} else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM) {
-		int		j;
+		if (p->mode_prop->flags & DRM_MODE_PROP_RANGE) {
+			err = RRChangeOutputProperty(output->randr_output,
+					property, XA_INTEGER, 32,
+					PropModeReplace, 1, &value,
+					FALSE, FALSE);
 
-		/* search for matching name string, then set its value down */
-		for (j = 0; j < p->mode_prop->count_enums; j++) {
-			if (p->mode_prop->enums[j].value == value)
-				break;
+			return !err;
+		} else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM) {
+			int		j;
+
+			/* search for matching name string, then set its value down */
+			for (j = 0; j < p->mode_prop->count_enums; j++) {
+				if (p->mode_prop->enums[j].value == value)
+					break;
+			}
+
+			err = RRChangeOutputProperty(output->randr_output, property,
+					XA_ATOM, 32, PropModeReplace, 1,
+					&p->atoms[j+1], FALSE, FALSE);
+
+			return !err;
 		}
-
-		err = RRChangeOutputProperty(output->randr_output, property,
-				XA_ATOM, 32, PropModeReplace, 1,
-				&p->atoms[j+1], FALSE, FALSE);
-
-		return !err;
 	}
 
 	return FALSE;
