@@ -1469,50 +1469,140 @@ drmmode_output_set_property(xf86OutputPtr output, Atom property,
 	return TRUE;
 }
 
+/* These are borrowed from libdrm/xf86drmMode.c */
+#define U642VOID(x) ((void *)(unsigned long)(x))
+#define VOID2U64(x) ((uint64_t)(unsigned long)(x))
+
+static Bool
+drmmode_output_get_property_from_connector(xf86OutputPtr output, int prop_idx,
+			uint64_t *val)
+{
+	drmmode_output_private_ptr drmmode_output = output->driver_private;
+	drmmode_ptr drmmode = drmmode_output->drmmode;
+	struct drm_mode_get_connector conn, counts;
+	struct drm_mode_modeinfo mode;
+	uint64_t *prop_values;
+	Bool r = TRUE;
+
+retry:
+	memset(&conn, 0, sizeof(struct drm_mode_get_connector));
+	conn.connector_id = drmmode_output->id;
+
+	/*
+	 * This is a hack to prevent the kernel from calling get_modes()
+	 * on this connector when all we really want is a property
+	 * value. In certain cases, fetching the display modes can take
+	 * on the order of seconds, and we don't want to spend that
+	 * long here.
+	 *
+	 * By requesting one mode, the kernel will just fill up modes_ptr with
+	 * the first mode (if it exists), and it'll be a noop if there are
+	 * no modes. It's important that we don't use this mode for anything
+	 * since it could be out-of-date.
+	 */
+	conn.count_modes = 1;
+	conn.modes_ptr = VOID2U64(&mode);
+	if (drmIoctl(drmmode->fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn))
+		return FALSE;
+
+	counts = conn;
+
+	if (!conn.count_props)
+		return FALSE;
+
+	conn.props_ptr = VOID2U64(
+			drmMalloc(conn.count_props * sizeof(uint32_t)));
+	if (!conn.props_ptr) {
+		r = FALSE;
+		goto err_allocs;
+	}
+
+	conn.prop_values_ptr = VOID2U64(
+			drmMalloc(conn.count_props * sizeof(uint64_t)));
+	if (!conn.prop_values_ptr) {
+		r = FALSE;
+		goto err_allocs;
+	}
+
+	/* Reset the encoder/mode counts so we don't fetch them */
+	conn.count_encoders = 0;
+	conn.count_modes = 1;
+	if (drmIoctl(drmmode->fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn)) {
+		r = FALSE;
+		goto err_allocs;
+	}
+
+	/*
+	 * The number of props may have changed with a hotplug event in between
+	 * the ioctls, in which case the field is silently ignored by the
+	 * kernel.
+	 */
+	if (counts.count_props < conn.count_props) {
+		drmFree(U642VOID(conn.props_ptr));
+		drmFree(U642VOID(conn.prop_values_ptr));
+		goto retry;
+	}
+
+	if (conn.count_props <= prop_idx) {
+		r = FALSE;
+		goto err_allocs;
+	}
+
+	prop_values = U642VOID(conn.prop_values_ptr);
+	*val = prop_values[prop_idx];
+
+err_allocs:
+	drmFree(U642VOID(conn.prop_values_ptr));
+	drmFree(U642VOID(conn.props_ptr));
+
+	return r;
+}
+
 static Bool
 drmmode_output_get_property(xf86OutputPtr output, Atom property)
 {
-
 	drmmode_output_private_ptr drmmode_output = output->driver_private;
-	drmmode_ptr drmmode = drmmode_output->drmmode;
-	uint32_t value;
+	drmmode_prop_ptr p = NULL;
+	uint64_t value;
 	int err, i;
 
+	for (i = 0; i < drmmode_output->num_props; i++) {
+		p = &drmmode_output->props[i];
+		if (p->atoms[0] == property)
+			break;
+	}
+	if (i == drmmode_output->num_props)
+		return FALSE;
+
 	if (output->scrn->vtSema) {
-		drmModeFreeConnector(drmmode_output->mode_output);
-		drmmode_output->mode_output = drmModeGetConnector(drmmode->fd,
-				drmmode_output->id);
+		if (!drmmode_output_get_property_from_connector(output,
+				p->index, &value))
+			return FALSE;
+	} else {
+		value = drmmode_output->mode_output->prop_values[p->index];
 	}
 
-	for (i = 0; i < drmmode_output->num_props; i++) {
-		drmmode_prop_ptr p = &drmmode_output->props[i];
-		if (p->atoms[0] != property)
-			continue;
+	if (p->mode_prop->flags & DRM_MODE_PROP_RANGE) {
+		err = RRChangeOutputProperty(output->randr_output,
+				property, XA_INTEGER, 32,
+				PropModeReplace, 1, &value,
+				FALSE, FALSE);
 
-		value = drmmode_output->mode_output->prop_values[p->index];
+		return !err;
+	} else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM) {
+		int		j;
 
-		if (p->mode_prop->flags & DRM_MODE_PROP_RANGE) {
-			err = RRChangeOutputProperty(output->randr_output,
-					property, XA_INTEGER, 32,
-					PropModeReplace, 1, &value,
-					FALSE, FALSE);
-
-			return !err;
-		} else if (p->mode_prop->flags & DRM_MODE_PROP_ENUM) {
-			int		j;
-
-			/* search for matching name string, then set its value down */
-			for (j = 0; j < p->mode_prop->count_enums; j++) {
-				if (p->mode_prop->enums[j].value == value)
-					break;
-			}
-
-			err = RRChangeOutputProperty(output->randr_output, property,
-					XA_ATOM, 32, PropModeReplace, 1,
-					&p->atoms[j+1], FALSE, FALSE);
-
-			return !err;
+		/* search for matching name string, then set its value down */
+		for (j = 0; j < p->mode_prop->count_enums; j++) {
+			if (p->mode_prop->enums[j].value == value)
+				break;
 		}
+
+		err = RRChangeOutputProperty(output->randr_output, property,
+				XA_ATOM, 32, PropModeReplace, 1,
+				&p->atoms[j+1], FALSE, FALSE);
+
+		return !err;
 	}
 
 	return FALSE;
