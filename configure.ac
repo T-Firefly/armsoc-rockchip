@@ -83,7 +83,7 @@ if test "x${driver}" == "xexynos"; then
 fi
 
 if test "x${driver}" == "xrockchip"; then
-    PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libdrm_rockchip >= 0.1])
+    PKG_CHECK_MODULES(DRM, [libdrm >= 2.4.30] [libkms >= 0.1])
 fi
 
 # Checks for header files.

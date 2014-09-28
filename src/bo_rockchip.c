@@ -28,37 +28,68 @@
 #include <xf86.h>
 #include <xf86drm.h>
 #include <xf86drmMode.h>
-#include <libdrm/rockchip_drmif.h>
+#include <libkms/libkms.h>
 #include "omap_dumb.h"
 #include "omap_msg.h"
 
 static void *bo_rockchip_create(struct omap_device *dev,
-			size_t size, uint32_t flags, uint32_t *handle)
+				size_t width, size_t height, uint32_t flags,
+				uint32_t *handle, uint32_t *pitch)
 {
-	struct rockchip_bo *rockchip_bo;
+	struct kms_driver *kms = dev->bo_dev;
+	struct kms_bo *kms_bo;
+	unsigned attr[7];
 
-	rockchip_bo = rockchip_bo_create(dev->bo_dev, size, flags);
-	*handle = rockchip_bo_handle(rockchip_bo);
+	attr[0] = KMS_WIDTH;
+	attr[1] = width;
+	attr[2] = KMS_HEIGHT;
+	attr[3] = height;
+	attr[4] = KMS_BO_TYPE;
+	attr[5] = KMS_BO_TYPE_SCANOUT_X8R8G8B8;
+	attr[6] = 0;
 
-	return rockchip_bo;
+	if (kms_bo_create(kms, attr, &kms_bo))
+		return NULL;
+
+	if (kms_bo_get_prop(kms_bo, KMS_HANDLE, handle))
+		return NULL;
+
+	if (kms_bo_get_prop(kms_bo, KMS_PITCH, pitch))
+		return NULL;
+
+	return kms_bo;
 }
 
 static void bo_rockchip_destroy(struct omap_bo *bo)
 {
-	rockchip_bo_destroy(bo->priv_bo);
+	kms_bo_destroy((struct kms_bo **)&bo->priv_bo);
 }
 
 static int bo_rockchip_get_name(struct omap_bo *bo, uint32_t *name)
 {
-	return rockchip_bo_get_name(bo->priv_bo, name);
+	struct drm_gem_flink req = {
+		.handle = bo->handle,
+	};
+	int ret;
+
+	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_GEM_FLINK, &req);
+	if (ret) {
+		return ret;
+	}
+
+	*name = req.name;
+
+	return 0;
 }
 
 static void *bo_rockchip_map(struct omap_bo *bo)
 {
-	struct rockchip_bo *rockchip_bo = bo->priv_bo;
-	if (rockchip_bo->vaddr)
-		return rockchip_bo->vaddr;
-	return rockchip_bo_map(bo->priv_bo);
+	void *map_addr;
+
+	if (kms_bo_map(bo->priv_bo, &map_addr))
+		return NULL;
+
+	return map_addr;
 }
 
 static int bo_rockchip_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
@@ -82,13 +113,14 @@ static const struct bo_ops bo_rockchip_ops = {
 
 int bo_device_init(struct omap_device *dev)
 {
-	struct rockchip_device *new_rockchip_dev;
+	struct kms_driver *kms;
+	int ret;
 
-	new_rockchip_dev = rockchip_device_create(dev->fd);
-	if (!new_rockchip_dev)
+	ret = kms_create(dev->fd, &kms);
+	if (ret || !kms)
 		return FALSE;
 
-	dev->bo_dev = new_rockchip_dev;
+	dev->bo_dev = kms;
 	dev->ops = &bo_rockchip_ops;
 
 	return TRUE;
@@ -97,5 +129,5 @@ int bo_device_init(struct omap_device *dev)
 void bo_device_deinit(struct omap_device *dev)
 {
 	if (dev->bo_dev)
-		rockchip_device_destroy(dev->bo_dev);
+		kms_destroy(dev->bo_dev);
 }

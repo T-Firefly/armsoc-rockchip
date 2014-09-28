@@ -55,11 +55,17 @@ struct drm_exynos_gem_cpu_release {
 #define DRM_IOCTL_EXYNOS_GEM_CPU_RELEASE       DRM_IOWR(DRM_COMMAND_BASE + \
 		DRM_EXYNOS_GEM_CPU_RELEASE, struct drm_exynos_gem_cpu_release)
 
-static void *bo_exynos_create(struct omap_device *dev,
-			size_t size, uint32_t flags, uint32_t *handle)
-
+static void *bo_exynos_create(struct omap_device *dev, uint32_t width,
+			uint32_t height, uint32_t flags, uint32_t *handle,
+			uint32_t *pitch)
 {
 	struct exynos_bo *exynos_bo;
+	size_t size;
+
+	/* align to 64 bytes since Mali requires it.
+	 */
+	*pitch = ((((width * bpp + 7) / 8) + 63) / 64) * 64;
+	size = height * (*pitch);
 
 	flags |= EXYNOS_BO_NONCONTIG;
 

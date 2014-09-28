@@ -86,7 +86,6 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	const struct bo_ops *bo_ops = dev->ops;
 	struct omap_bo *new_buf;
 	uint32_t pitch;
-	size_t size;
 	const uint32_t flags = 0;
 	int ret;
 
@@ -94,15 +93,11 @@ static struct omap_bo *omap_bo_new(struct omap_device *dev, uint32_t width,
 	if (!new_buf)
 		return NULL;
 
-	/* align to 64 bytes since Mali requires it.
-	 */
-	pitch = ((((width * bpp + 7) / 8) + 63) / 64) * 64;
-	size = height * pitch;
-
-	new_buf->priv_bo = bo_ops->bo_create(dev, size, flags, &new_buf->handle);
+	new_buf->priv_bo = bo_ops->bo_create(dev, width, height, flags,
+					     &new_buf->handle, &pitch);
 	if (!new_buf->priv_bo) {
-		ERROR_MSG("PLATFORM_BO_CREATE(size: %zu flags: 0x%x) failed: %s",
-				size, flags, strerror(errno));
+		ERROR_MSG("PLATFORM_BO_CREATE(%ux%u flags: 0x%x) failed: %s",
+				width, height, flags, strerror(errno));
 		goto free_buf;
 	}
 

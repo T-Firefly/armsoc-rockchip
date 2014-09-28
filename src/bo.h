@@ -30,7 +30,8 @@ struct omap_device;
 enum omap_gem_op;
 struct bo_ops {
 	void *(*bo_create)(struct omap_device *dev,
-			size_t size, uint32_t flags, uint32_t *handle);
+			   size_t width, size_t height, uint32_t flags,
+			   uint32_t *handle, uint32_t *pitch);
 	void (*bo_destroy)(struct omap_bo *bo);
 	int (*bo_get_name)(struct omap_bo *bo, uint32_t *name);
 	void *(*bo_map)(struct omap_bo *bo);
