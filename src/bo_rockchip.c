@@ -32,30 +32,6 @@
 #include "omap_dumb.h"
 #include "omap_msg.h"
 
-enum {
-	DRM_ROCKCHIP_GEM_CPU_ACQUIRE_SHARED = 0x0,
-	DRM_ROCKCHIP_GEM_CPU_ACQUIRE_EXCLUSIVE = 0x1,
-};
-
-struct drm_rockchip_gem_cpu_acquire {
-	uint32_t handle;
-	uint32_t flags;
-};
-
-struct drm_rockchip_gem_cpu_release {
-	uint32_t handle;
-};
-
-/* TODO: use rockchip_drm.h kernel headers */
-#define DRM_ROCKCHIP_GEM_CPU_ACQUIRE     0x02
-#define DRM_IOCTL_ROCKCHIP_GEM_CPU_ACQUIRE       DRM_IOWR(DRM_COMMAND_BASE + \
-		DRM_ROCKCHIP_GEM_CPU_ACQUIRE, struct drm_rockchip_gem_cpu_acquire)
-#define DRM_ROCKCHIP_GEM_CPU_RELEASE     0x03
-#define DRM_IOCTL_ROCKCHIP_GEM_CPU_RELEASE       DRM_IOWR(DRM_COMMAND_BASE + \
-		DRM_ROCKCHIP_GEM_CPU_RELEASE, struct drm_rockchip_gem_cpu_release)
-
-
-
 static void *bo_rockchip_create(struct omap_device *dev,
 			size_t size, uint32_t flags, uint32_t *handle)
 {
@@ -87,35 +63,12 @@ static void *bo_rockchip_map(struct omap_bo *bo)
 
 static int bo_rockchip_cpu_prep(struct omap_bo *bo, enum omap_gem_op op)
 {
-	ScrnInfoPtr pScrn = bo->dev->pScrn;
-	struct drm_rockchip_gem_cpu_acquire acquire;
-	int ret;
-
-	acquire.handle = bo->handle;
-	acquire.flags = (op & OMAP_GEM_WRITE)
-		? DRM_ROCKCHIP_GEM_CPU_ACQUIRE_EXCLUSIVE
-		: DRM_ROCKCHIP_GEM_CPU_ACQUIRE_SHARED;
-	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_ROCKCHIP_GEM_CPU_ACQUIRE,
-			&acquire);
-	if (ret)
-		ERROR_MSG("DRM_IOCTL_ROCKCHIP_GEM_CPU_ACQUIRE failed: %s",
-				strerror(errno));
-	return ret;
+	return 0;
 }
 
 static int bo_rockchip_cpu_fini(struct omap_bo *bo, enum omap_gem_op op)
 {
-	ScrnInfoPtr pScrn = bo->dev->pScrn;
-	struct drm_rockchip_gem_cpu_release release;
-	int ret;
-
-	release.handle = bo->handle;
-	ret = drmIoctl(bo->dev->fd, DRM_IOCTL_ROCKCHIP_GEM_CPU_RELEASE,
-			&release);
-	if (ret)
-		ERROR_MSG("DRM_IOCTL_ROCKCHIP_GEM_CPU_RELEASE failed: %s",
-				strerror(errno));
-	return ret;
+	return 0;
 }
 
 static const struct bo_ops bo_rockchip_ops = {
