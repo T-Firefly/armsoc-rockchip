@@ -240,7 +240,7 @@ OMAPDRI2CreateBuffer(DrawablePtr pDraw, unsigned int attachment,
 	DRIBUF(buf)->pitch = exaGetPixmapPitch(pPixmap);
 	DRIBUF(buf)->cpp = pPixmap->drawable.bitsPerPixel / 8;
 	DRIBUF(buf)->format = format;
-	DRIBUF(buf)->flags = omap_bo_get_dirty(bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
+	DRIBUF(buf)->flags = 0;//omap_bo_get_dirty(bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
 	buf->pPixmap = pPixmap;
 	buf->previous_canflip = -1;
 
@@ -679,7 +679,7 @@ OMAPDRI2ReuseBufferNotify(DrawablePtr pDraw, DRI2BufferPtr buffer)
 	OMAPPixmapPrivPtr omap_priv = exaGetPixmapDriverPrivate(pPixmap);
 
 	buffer->name = omap_bo_get_name(omap_priv->bo);
-	buffer->flags = omap_bo_get_dirty(omap_priv->bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
+	buffer->flags = 0;// omap_bo_get_dirty(omap_priv->bo) ? DRI2_ARMSOC_PRIVATE_CRC_DIRTY : 0;
 }
 
 /**
