@@ -59,7 +59,6 @@
 #include "mipointer.h"
 
 /* All drivers implementing backing store need this */
-#include "mibstore.h"
 
 #include "micmap.h"
 
@@ -1621,7 +1620,7 @@ Bool drmmode_pre_init(ScrnInfoPtr pScrn, int fd)
 
 	TRACE_ENTER();
 
-	pScrn->canDoBGNoneRoot = TRUE;
+//	pScrn->canDoBGNoneRoot = TRUE;
 
 	xf86CrtcConfigInit(pScrn, &drmmode_xf86crtc_config_funcs);
 
